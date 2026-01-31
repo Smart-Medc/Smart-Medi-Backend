@@ -1,0 +1,20 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace Smart_Medc.Domain.Enums
+{
+    public enum NotificationType
+    {
+        AppointmentReminder = 1,
+        MedicationReminder = 2,
+        AppointmentRequest = 3,
+        AppointmentConfirmation = 4,
+        AppointmentCancellation = 5,
+        RecordAccess = 6,
+        AIHealthAlert = 7,
+        SystemNotification = 8
+    }
+}

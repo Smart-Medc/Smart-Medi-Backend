@@ -1,0 +1,6 @@
+@Smart_Medc.API_HostAddress = http://localhost:5278
+
+GET {{Smart_Medc.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
