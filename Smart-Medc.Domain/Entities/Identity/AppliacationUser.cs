@@ -1,5 +1,6 @@
-﻿using Domain.Entities.Identity;
-using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Identity;
+using Smart_Medc.Domain.Entities.OrganizationModels;
+using Smart_Medc.Domain.Entities.PatientModels;
 using Smart_Medc.Domain.Enums;
 
 namespace Smart_Medc.Domain.Entities.Identity;

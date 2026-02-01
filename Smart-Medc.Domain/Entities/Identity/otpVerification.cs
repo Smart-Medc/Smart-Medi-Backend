@@ -1,6 +1,6 @@
-﻿using Smart_Medc.Domain.Entities.Identity;
+﻿using Smart_Medc.Domain.Enums;
 
-namespace Domain.Entities.Identity;
+namespace Smart_Medc.Domain.Entities.Identity;
 
 public class OtpVerification
 {

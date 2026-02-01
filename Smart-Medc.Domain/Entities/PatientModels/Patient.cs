@@ -1,5 +1,8 @@
-﻿using Smart_Medc.Domain.Entities.DataSharing;
+﻿using Smart_Medc.Domain.Entities.AI;
+using Smart_Medc.Domain.Entities.AppointmentModels;
+using Smart_Medc.Domain.Entities.DataSharing;
 using Smart_Medc.Domain.Entities.Identity;
+using Smart_Medc.Domain.Entities.Notification;
 using Smart_Medc.Domain.Enums;
 
 namespace Smart_Medc.Domain.Entities.PatientModels;
@@ -38,7 +41,7 @@ public class Patient
     public virtual ICollection<JournalEntry> JournalEntries { get; set; } = new List<JournalEntry>();
     public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
     public virtual ICollection<DataShareCode> DataShareCodes { get; set; } = new List<DataShareCode>();
-    public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
+    public virtual ICollection<PatientNotification> Notifications { get; set; } = new List<PatientNotification>();
     public virtual ICollection<AIChatSession> AIChatSessions { get; set; } = new List<AIChatSession>();
 }
 

@@ -1,6 +1,4 @@
-﻿using Smart_Medc.Domain.Entities.Identity;
-
-namespace Domain.Entities.Identity;
+﻿namespace Smart_Medc.Domain.Entities.Identity;
 
 public class BackupCode
 {

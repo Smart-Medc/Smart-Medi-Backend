@@ -1,4 +1,6 @@
 ﻿
+using Smart_Medc.Domain.Entities.OrganizationModels;
+
 namespace Smart_Medc.Domain.Entities.DataSharing
 {
     public class DataShareAccessLog

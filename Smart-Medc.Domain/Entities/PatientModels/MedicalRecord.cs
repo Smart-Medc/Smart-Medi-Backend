@@ -1,4 +1,5 @@
-﻿using Smart_Medc.Domain.Enums;
+﻿using Smart_Medc.Domain.Entities.DataSharing;
+using Smart_Medc.Domain.Enums;
 
 namespace Smart_Medc.Domain.Entities.PatientModels;
 

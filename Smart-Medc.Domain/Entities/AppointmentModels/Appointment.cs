@@ -20,10 +20,7 @@ namespace Smart_Medc.Domain.Entities.AppointmentModels
         public int DurationMinutes { get; set; }
 
         public AppointmentType Type { get; set; }
-        public VisitType VisitType { get; set; }
         public string? ReasonForVisit { get; set; }
-        public string? SpecialRequirements { get; set; }
-
         public AppointmentStatus Status { get; set; } = AppointmentStatus.Pending;
 
         // Data Sharing
