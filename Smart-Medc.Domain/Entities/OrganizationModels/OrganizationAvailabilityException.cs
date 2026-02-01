@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Smart_Medc.Domain.Entities.OrganizationModels
+﻿namespace Smart_Medc.Domain.Entities.OrganizationModels
 {
     public class OrganizationAvailabilityException
     {
@@ -13,6 +7,8 @@ namespace Smart_Medc.Domain.Entities.OrganizationModels
 
         public DateOnly Date { get; set; }
         public bool IsFullDayOff { get; set; } = true;
+
+        // Is triggered if IsFullDayOff = false
         public TimeOnly? StartTime { get; set; }
         public TimeOnly? EndTime { get; set; }
         public string? Reason { get; set; }

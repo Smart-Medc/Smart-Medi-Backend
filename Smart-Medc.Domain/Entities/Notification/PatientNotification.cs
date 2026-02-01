@@ -2,12 +2,12 @@
 using Smart_Medc.Domain.Enums;
 namespace Smart_Medc.Domain.Entities.Notification
 {
-    public class Notification
+    public class PatientNotification
     {
         public Guid Id { get; set; }
         public Guid PatientId { get; set; }
 
-        public NotificationType Type { get; set; }
+        public PatientNotificationType Type { get; set; }
         public string Title { get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;
         public string? ActionUrl { get; set; }
@@ -23,5 +23,5 @@ namespace Smart_Medc.Domain.Entities.Notification
         public virtual Patient Patient { get; set; } = null!;
     }
 
-    
+
 }
