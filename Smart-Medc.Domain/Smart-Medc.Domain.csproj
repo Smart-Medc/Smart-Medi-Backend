@@ -8,12 +8,18 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Interfaces\" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="9.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.12" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="9.0.12" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.12" />
+    <Folder Include="Interfaces\Services\AI\" />
+    <Folder Include="Interfaces\Services\Appointments\" />
+    <Folder Include="Interfaces\Services\DataSharing\" />
+    <Folder Include="Interfaces\Services\Identity\" />
+    <Folder Include="Interfaces\Services\Notifications\" />
+    <Folder Include="Interfaces\Services\Organizations\" />
+    <Folder Include="Interfaces\Services\Patients\" />
   </ItemGroup>
 
 </Project>
