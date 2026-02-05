@@ -1,8 +1,7 @@
-
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
-using Smart_Medc.Domain.Entities.Identity;
-using Smart_Medc.Infrastructure.Persistence;
+using HealthChecks.UI.Client;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Smart_Medc.Application.ServiceCollectionExtension;
+using Smart_Medc.Infrastructure.ServiceCollectionExtension;
 
 namespace Smart_Medc.API
 {
@@ -12,29 +11,49 @@ namespace Smart_Medc.API
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // Add services to the container.
-
+            // Add services to the container
             builder.Services.AddControllers();
-            builder.Services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseSqlServer(builder.Configuration.GetConnectionString("cs")));
-            builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>()
-            .AddEntityFrameworkStores<ApplicationDbContext>()
-            .AddDefaultTokenProviders();
-            // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+
+            // Register Infrastructure Services (DbContext, Identity, Repositories)
+            builder.Services.AddInfrastructureServices(builder.Configuration);
+
+            // Register Application Services (Business Logic Services)
+            builder.Services.AddApplicationServices(builder.Configuration);
+
+            // Configure OpenAPI/Swagger
             builder.Services.AddOpenApi();
+
+            // Add CORS policy (configure as needed)
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowAll", policy =>
+                {
+                    policy.AllowAnyOrigin()
+                          .AllowAnyMethod()
+                          .AllowAnyHeader();
+                });
+            });
 
             var app = builder.Build();
 
-            // Configure the HTTP request pipeline.
+            // Configure the HTTP request pipeline
             if (app.Environment.IsDevelopment())
             {
                 app.MapOpenApi();
+                app.UseDeveloperExceptionPage();
             }
 
             app.UseHttpsRedirection();
 
+            app.UseCors("AllowAll");
+
+            app.UseAuthentication();
             app.UseAuthorization();
 
+            app.MapHealthChecks("/health", new HealthCheckOptions
+            {
+                ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+            });
 
             app.MapControllers();
 
