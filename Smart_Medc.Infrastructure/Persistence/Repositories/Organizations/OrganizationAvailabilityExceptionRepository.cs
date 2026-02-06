@@ -1,11 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Smart_Medc.Domain.Entities.OrganizationModels;
 using Smart_Medc.Domain.Interfaces.Repositories.Organizations;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Smart_Medc.Infrastructure.Persistence.Repositories.Organizations
 {
@@ -30,8 +25,8 @@ namespace Smart_Medc.Infrastructure.Persistence.Repositories.Organizations
         {
             return await _dbSet
                 .FirstOrDefaultAsync(e => e.OrganizationId == organizationId &&
-                                         e.Date.Date == date.Date,
-                                    cancellationToken);
+                                     e.Date == DateOnly.FromDateTime(date.Date),
+                                cancellationToken);
         }
 
         public async Task<IEnumerable<OrganizationAvailabilityException>> GetByDateRangeAsync(
@@ -40,10 +35,13 @@ namespace Smart_Medc.Infrastructure.Persistence.Repositories.Organizations
             DateTime endDate,
             CancellationToken cancellationToken = default)
         {
+            var startDateOnly = DateOnly.FromDateTime(startDate.Date);
+            var endDateOnly = DateOnly.FromDateTime(endDate.Date);
+
             return await _dbSet
                 .Where(e => e.OrganizationId == organizationId &&
-                           e.Date >= startDate &&
-                           e.Date <= endDate)
+                           e.Date >= startDateOnly &&
+                           e.Date <= endDateOnly)
                 .OrderBy(e => e.Date)
                 .ToListAsync(cancellationToken);
         }

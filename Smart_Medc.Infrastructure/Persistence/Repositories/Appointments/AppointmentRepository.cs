@@ -1,11 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Smart_Medc.Domain.Entities.AppointmentModels;
 using Smart_Medc.Domain.Interfaces.Repositories.Appointments;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Smart_Medc.Infrastructure.Persistence.Repositories.Appointments
 {
@@ -58,7 +53,7 @@ namespace Smart_Medc.Infrastructure.Persistence.Repositories.Appointments
             CancellationToken cancellationToken = default)
         {
             var today = DateTime.UtcNow.Date;
-            var now = DateTime.UtcNow.TimeOfDay;
+            var now = TimeOnly.FromDateTime(DateTime.UtcNow);
 
             return await _dbSet
                 .Where(a => a.PatientId == patientId &&
@@ -117,7 +112,7 @@ namespace Smart_Medc.Infrastructure.Persistence.Repositories.Appointments
                            a.AppointmentDate == appointmentDate &&
                            a.Status != Domain.Enums.AppointmentStatus.Cancelled &&
                            a.Status != Domain.Enums.AppointmentStatus.NoShow &&
-                           ((a.StartTime < endTime && a.EndTime > startTime)));
+                           ((a.StartTime < TimeOnly.FromTimeSpan(endTime) && a.EndTime > TimeOnly.FromTimeSpan(startTime))));
 
             if (excludeAppointmentId.HasValue)
             {
