@@ -13,6 +13,9 @@ namespace Smart_Medc.API
 
             // Add services to the container
             builder.Services.AddControllers();
+            builder.Services.AddEndpointsApiExplorer();
+            builder.Services.AddSwaggerGen();
+
 
             // Register Infrastructure Services (DbContext, Identity, Repositories)
             builder.Services.AddInfrastructureServices(builder.Configuration);
@@ -41,6 +44,8 @@ namespace Smart_Medc.API
             {
                 app.MapOpenApi();
                 app.UseDeveloperExceptionPage();
+                app.UseSwagger();
+                app.UseSwaggerUI();
             }
 
             app.UseHttpsRedirection();
