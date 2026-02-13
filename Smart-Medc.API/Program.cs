@@ -123,6 +123,8 @@ namespace Smart_Medc.API
                     c.RoutePrefix = string.Empty; // Set Swagger UI, but fucking not work. Fix it later.
                 });
                 app.UseDeveloperExceptionPage();
+                app.UseSwagger();
+                app.UseSwaggerUI();
             }
 
             var uploadsPath = Path.Combine(builder.Environment.ContentRootPath, "uploads");

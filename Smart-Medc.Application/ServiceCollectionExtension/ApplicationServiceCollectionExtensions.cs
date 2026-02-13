@@ -1,5 +1,7 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Smart_Medc.Application.Interfaces;
+using Smart_Medc.Application.Services;
 using Smart_Medc.Application.Configuration;
 using Smart_Medc.Application.Interfaces.Auth;
 using Smart_Medc.Application.Interfaces.Services;
@@ -19,6 +21,9 @@ namespace Smart_Medc.Application.ServiceCollectionExtension
             this IServiceCollection services,
             IConfiguration configuration)
         {
+            services.AddScoped<IMedicalRecordService, MedicalRecordService>();
+            services.AddScoped<IMedicationService, MedicationService>();
+            services.AddScoped<IJournalService, JournalService>();
             // Register Auth Services
             services.AddScoped<ITokenService, TokenService>();
             services.AddScoped<IAuthenticationService, AuthenticationService>();

@@ -1,8 +1,10 @@
-﻿using Microsoft.AspNetCore.Identity;
+﻿using Amazon.S3;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Smart_Medc.Application.Interfaces;
 using Smart_Medc.Domain.Entities.Identity;
 using Smart_Medc.Domain.Interfaces.Repositories;
 using Smart_Medc.Domain.Interfaces.Repositories.AI;
@@ -21,6 +23,7 @@ using Smart_Medc.Infrastructure.Persistence.Repositories.Identity;
 using Smart_Medc.Infrastructure.Persistence.Repositories.Notifications;
 using Smart_Medc.Infrastructure.Persistence.Repositories.Organizations;
 using Smart_Medc.Infrastructure.Persistence.Repositories.Patients;
+using Smart_Medc.Infrastructure.Services.Storage;
 
 namespace Smart_Medc.Infrastructure.ServiceCollectionExtension
 {
@@ -54,6 +57,23 @@ namespace Smart_Medc.Infrastructure.ServiceCollectionExtension
             services.AddNotificationRepositories();
 
             services.AddAIChatRepositories();
+
+            services.AddSingleton<IAmazonS3>(sp =>
+            {
+                var accountId = configuration["CloudflareR2:AccountId"];
+                var accessKeyId = configuration["CloudflareR2:AccessKeyId"];
+                var secretAccessKey = configuration["CloudflareR2:SecretAccessKey"];
+
+                var config = new AmazonS3Config
+                {
+                    ServiceURL = $"https://{accountId}.r2.cloudflarestorage.com",
+                    ForcePathStyle = true,
+                };
+
+                return new AmazonS3Client(accessKeyId, secretAccessKey, config);
+            });
+
+            services.AddScoped<IFileStorageService, CloudflareR2StorageService>();
 
             return services;
         }
