@@ -64,7 +64,7 @@ namespace Smart_Medc.Infrastructure.ServiceCollectionExtension
         {
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseSqlServer(
-                    configuration.GetConnectionString("cs"),
+                    configuration.GetConnectionString("AliReda"),
                     sqlOptions => sqlOptions
                         .EnableRetryOnFailure(
                             maxRetryCount: 3,
