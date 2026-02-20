@@ -63,25 +63,31 @@ namespace Smart_Medc.API.Controllers
         }
 
         /// <summary>
-        /// GET: api/data-sharing/codes?pageNumber=1&pageSize=20
-        /// Get all active share codes for authenticated patient with pagination
+        /// GET: api/data-sharing/codes?pageNumber=1&pageSize=20&filter=active
+        /// Get share codes for authenticated patient with pagination. Filter can be 'active' (default) or 'inactive' (revoked and expired together).
         /// </summary>
         [HttpGet("codes")]
         public async Task<ActionResult<PagedResult<DataShareCodeDto>>> GetAll(
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 20,
+            [FromQuery] string filter = "active",
             CancellationToken cancellationToken = default)
         {
-            // Get patientId from authenticated user token
+            // Validate filter
+            if (filter != "active" && filter != "inactive")
+            {
+                return BadRequest(new { message = "Invalid filter value. Must be 'active' or 'inactive'." });
+            }
+
+            // Get userId from authenticated user token
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrWhiteSpace(userIdClaim) || !Guid.TryParse(userIdClaim, out var patientId))
+            if (string.IsNullOrWhiteSpace(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
             {
                 return Unauthorized(new { message = "User ID not found in token" });
             }
-
             try
             {
-                var result = await _service.GetActiveCodesAsync(patientId, pageNumber, pageSize, cancellationToken);
+                var result = await _service.GetCodesAsync(userId, filter, pageNumber, pageSize, cancellationToken);
                 return Ok(result);
             }
             catch (KeyNotFoundException ex)

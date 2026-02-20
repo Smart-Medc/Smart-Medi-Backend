@@ -10,8 +10,9 @@ namespace Smart_Medc.Application.Interfaces
             GenerateShareCodeDto dto,
             CancellationToken cancellationToken = default);
 
-        Task<PagedResult<DataShareCodeDto>> GetActiveCodesAsync(
-            Guid patientId,
+        Task<PagedResult<DataShareCodeDto>> GetCodesAsync(
+            Guid userId,
+            string filter = "active",
             int pageNumber = 1,
             int pageSize = 20,
             CancellationToken cancellationToken = default);

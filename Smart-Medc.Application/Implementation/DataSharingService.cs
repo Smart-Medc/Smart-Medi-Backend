@@ -3,6 +3,7 @@ using Smart_Medc.Application.Common;
 using Smart_Medc.Application.DTOs.DataSharing;
 using Smart_Medc.Application.Interfaces;
 using Smart_Medc.Domain.Entities.DataSharing;
+using Smart_Medc.Domain.Entities.OrganizationModels;
 using Smart_Medc.Domain.Enums;
 using Smart_Medc.Domain.Interfaces.Repositories;
 
@@ -22,10 +23,14 @@ namespace Smart_Medc.Application.Implementation
         }
 
         public async Task<DataShareCodeDto> GenerateShareCodeAsync(
-            Guid patientId,
+            Guid userId,
             GenerateShareCodeDto dto,
             CancellationToken cancellationToken = default)
         {
+            // Validate patient exists
+            var patient = await _unitOfWork.Patients.GetByUserIdAsync(userId, cancellationToken);
+            if (patient == null)
+                throw new KeyNotFoundException("Patient not found");
 
             // Parse expiration type
             if (!Enum.TryParse<DataShareExpirationType>(dto.ExpirationType, true, out var expirationType))
@@ -35,7 +40,7 @@ namespace Smart_Medc.Application.Implementation
             foreach (var recordId in dto.SpecificRecordIds)
             {
                 var record = await _unitOfWork.MedicalRecords.GetByIdAsync(recordId, cancellationToken);
-                if (record == null || record.PatientId != patientId || record.IsDeleted)
+                if (record == null || record.PatientId != patient.Id || record.IsDeleted)
                     throw new UnauthorizedAccessException($"Medical record {recordId} not found or unauthorized");
             }
 
@@ -45,7 +50,7 @@ namespace Smart_Medc.Application.Implementation
             var entity = new DataShareCode
             {
                 Id = Guid.NewGuid(),
-                PatientId = patientId,
+                PatientId = patient.Id,
                 Code = codeString,
                 ShareUrl = $"{_baseShareUrl}/{codeString}",
                 ExpirationType = expirationType,
@@ -76,16 +81,19 @@ namespace Smart_Medc.Application.Implementation
             return _mapper.Map<DataShareCodeDto>(entity);
         }
 
-        public async Task<PagedResult<DataShareCodeDto>> GetActiveCodesAsync(
-            Guid patientId,
+        public async Task<PagedResult<DataShareCodeDto>> GetCodesAsync(
+            Guid userId,
+            string filter = "active",
             int pageNumber = 1,
             int pageSize = 20,
             CancellationToken cancellationToken = default)
         {
             // Validate patient exists
-            var patient = await _unitOfWork.Patients.GetByIdAsync(patientId, cancellationToken);
+            var patient = await _unitOfWork.Patients.GetByUserIdAsync(userId, cancellationToken);
             if (patient == null)
                 throw new KeyNotFoundException("Patient not found");
+
+            bool activeOnly = filter == "active";
 
             // Validate and sanitize pagination parameters
             if (pageNumber < 1)
@@ -95,14 +103,12 @@ namespace Smart_Medc.Application.Implementation
             if (pageSize > 100)
                 pageSize = 100; // Max page size
 
-            // Get all active codes for the patient
-            var codes = await _unitOfWork.DataShareCodes.GetActiveCodesByPatientIdAsync(patientId, cancellationToken);
+            // Get codes for the patient
+            var codes = await _unitOfWork.DataShareCodes.GetCodesByPatientIdAsync(patient.Id, activeOnly, cancellationToken);
 
             // Order results (most recent first)
             var orderedCodes = codes
-                .OrderByDescending(c => c.CreatedAt)
                 .ToList();
-
             var totalCount = orderedCodes.Count;
 
             // Apply pagination
@@ -122,16 +128,21 @@ namespace Smart_Medc.Application.Implementation
         }
 
         public async Task RevokeCodeAsync(
-            Guid patientId,
+            Guid userId,
             Guid codeId,
             CancellationToken cancellationToken = default)
         {
+            // Validate patient exists
+            var patient = await _unitOfWork.Patients.GetByUserIdAsync(userId, cancellationToken);
+            if (patient == null)
+                throw new KeyNotFoundException("Patient not found");
+
             var code = await _unitOfWork.DataShareCodes.GetByIdAsync(codeId, cancellationToken);
             if (code == null)
                 throw new KeyNotFoundException("Share code not found");
 
             // Authorization check
-            if (code.PatientId != patientId)
+            if (code.PatientId != patient.Id)
                 throw new UnauthorizedAccessException("You don't have permission to revoke this code");
 
             // Validate current status
@@ -150,7 +161,7 @@ namespace Smart_Medc.Application.Implementation
             string code,
             string? ipAddress = null,
             string? userAgent = null,
-            Guid? organizationId = null,
+            Guid? userId = null,
             CancellationToken cancellationToken = default)
         {
             // Validate input parameters
@@ -169,9 +180,10 @@ namespace Smart_Medc.Application.Implementation
                 throw new ArgumentException("Code contains invalid characters", nameof(code));
 
             // Validate organizationId if provided
-            if (organizationId.HasValue && organizationId.Value != Guid.Empty)
+            Organization? organization = null;
+            if (userId.HasValue && userId.Value != Guid.Empty)
             {
-                var organization = await _unitOfWork.Organizations.GetByIdAsync(organizationId.Value, cancellationToken);
+                organization = await _unitOfWork.Organizations.GetByUserIdAsync(userId.Value, cancellationToken);
                 if (organization == null)
                     throw new KeyNotFoundException("Organization not found");
             }
@@ -231,7 +243,7 @@ namespace Smart_Medc.Application.Implementation
             {
                 Id = Guid.NewGuid(),
                 DataShareCodeId = entity.Id,
-                OrganizationId = organizationId,
+                OrganizationId = organization != null ? organization.Id : null,
                 IpAddress = ipAddress,
                 UserAgent = userAgent,
                 AccessedAt = DateTime.UtcNow
@@ -260,13 +272,13 @@ namespace Smart_Medc.Application.Implementation
         }
 
         public async Task<PagedResult<SharedMedicalRecordDto>> GetSharedRecordsAsync(
-    string code,
-    string? ipAddress = null,
-    string? userAgent = null,
-    Guid? organizationId = null,
-    int pageNumber = 1,
-    int pageSize = 20,
-    CancellationToken cancellationToken = default)
+            string code,
+            string? ipAddress = null,
+            string? userAgent = null,
+            Guid? userId = null,
+            int pageNumber = 1,
+            int pageSize = 20,
+            CancellationToken cancellationToken = default)
         {
             // Validate and sanitize input parameters
             if (string.IsNullOrWhiteSpace(code))
@@ -292,9 +304,10 @@ namespace Smart_Medc.Application.Implementation
                 pageSize = 100; // Max page size
 
             // Validate organizationId if provided
-            if (organizationId.HasValue && organizationId.Value != Guid.Empty)
+            Organization? organization = null;
+            if (userId.HasValue && userId.Value != Guid.Empty)
             {
-                var organization = await _unitOfWork.Organizations.GetByIdAsync(organizationId.Value, cancellationToken);
+                organization = await _unitOfWork.Organizations.GetByIdAsync(userId.Value, cancellationToken);
                 if (organization == null)
                     throw new KeyNotFoundException("Organization not found");
             }
@@ -351,7 +364,7 @@ namespace Smart_Medc.Application.Implementation
             {
                 Id = Guid.NewGuid(),
                 DataShareCodeId = entity.Id,
-                OrganizationId = organizationId,
+                OrganizationId = organization != null ? organization.Id : null,
                 IpAddress = ipAddress,
                 UserAgent = userAgent,
                 AccessedAt = DateTime.UtcNow
