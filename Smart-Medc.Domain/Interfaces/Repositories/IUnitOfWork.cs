@@ -61,6 +61,7 @@ namespace Smart_Medc.Domain.Interfaces.Repositories
 
         // Unit of Work operations
         Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+        IExecutionStrategy CreateExecutionStrategy();
         Task BeginTransactionAsync(CancellationToken cancellationToken = default);
         Task CommitTransactionAsync(CancellationToken cancellationToken = default);
         Task RollbackTransactionAsync(CancellationToken cancellationToken = default);

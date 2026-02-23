@@ -216,27 +216,31 @@ namespace Smart_Medc.Infrastructure.Persistence.Repositories
         }
 
         /// <summary>
+        /// Provides execution strategy for resilient transactions
+        /// </summary>
+        public IExecutionStrategy CreateExecutionStrategy()
+        {
+            return _context.Database.CreateExecutionStrategy();
+        }
+
+        /// <summary>
         /// Begins a new database transaction
         /// </summary>
         public async Task BeginTransactionAsync(CancellationToken cancellationToken = default)
         {
             if (_currentTransaction != null)
-            {
                 throw new InvalidOperationException("A transaction is already in progress.");
-            }
 
             _currentTransaction = await _context.Database.BeginTransactionAsync(cancellationToken);
         }
 
         /// <summary>
-        /// Commits the current transaction and saves all changes
+        /// Commits the current transaction
         /// </summary>
         public async Task CommitTransactionAsync(CancellationToken cancellationToken = default)
         {
             if (_currentTransaction == null)
-            {
                 throw new InvalidOperationException("No transaction in progress to commit.");
-            }
 
             try
             {
@@ -259,14 +263,12 @@ namespace Smart_Medc.Infrastructure.Persistence.Repositories
         }
 
         /// <summary>
-        /// Rolls back the current transaction and discards all changes
+        /// Rolls back the current transaction
         /// </summary>
         public async Task RollbackTransactionAsync(CancellationToken cancellationToken = default)
         {
             if (_currentTransaction == null)
-            {
                 throw new InvalidOperationException("No transaction in progress to rollback.");
-            }
 
             try
             {
@@ -274,11 +276,8 @@ namespace Smart_Medc.Infrastructure.Persistence.Repositories
             }
             finally
             {
-                if (_currentTransaction != null)
-                {
-                    await _currentTransaction.DisposeAsync();
-                    _currentTransaction = null;
-                }
+                await _currentTransaction.DisposeAsync();
+                _currentTransaction = null;
             }
         }
 

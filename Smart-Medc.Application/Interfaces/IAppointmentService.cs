@@ -13,6 +13,7 @@ namespace Smart_Medc.Application.Interfaces
 
         Task<PagedResult<AppointmentDto>> GetPatientAppointmentsAsync(
             Guid patientId,
+            Guid authenticatedUserId,
             string? status = null,
             int pageNumber = 1,
             int pageSize = 20,

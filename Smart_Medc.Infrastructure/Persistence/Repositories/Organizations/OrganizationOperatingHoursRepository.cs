@@ -1,11 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Smart_Medc.Domain.Entities.OrganizationModels;
 using Smart_Medc.Domain.Interfaces.Repositories.Organizations;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Smart_Medc.Infrastructure.Persistence.Repositories.Organizations
 {

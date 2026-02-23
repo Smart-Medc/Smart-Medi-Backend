@@ -80,16 +80,20 @@ namespace Smart_Medc.API.Controllers
         {
             // Verify user can only access their own appointments
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (Guid.TryParse(userIdClaim, out var userId) && userId != patientId)
+            if (string.IsNullOrWhiteSpace(userIdClaim) || !Guid.TryParse(userIdClaim, out var authenticatedUserId))
             {
-                return Forbid();
+                return Unauthorized(new { message = "User ID not found in token" });
             }
 
             try
             {
                 var result = await _appointmentService.GetPatientAppointmentsAsync(
-                    patientId, status, pageNumber, pageSize, cancellationToken);
+                     patientId, authenticatedUserId, status, pageNumber, pageSize, cancellationToken);
                 return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Forbid();
             }
             catch (KeyNotFoundException ex)
             {
@@ -307,7 +311,8 @@ namespace Smart_Medc.API.Controllers
             {
                 return Forbid();
             }
-            catch (Exception ex)            {
+            catch (Exception ex)
+            {
                 // Log the exception here
                 return StatusCode(500, new { message = "An error occurred while retrieving pending requests" });
             }

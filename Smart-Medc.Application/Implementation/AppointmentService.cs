@@ -1,4 +1,5 @@
 ﻿using AutoMapper;
+using Microsoft.EntityFrameworkCore;
 using Smart_Medc.Application.Common;
 using Smart_Medc.Application.DTOs.Appointment;
 using Smart_Medc.Application.Interfaces;
@@ -29,12 +30,12 @@ namespace Smart_Medc.Application.Implementation
         // =========================
 
         public async Task<AppointmentDto> BookAppointmentAsync(
-            Guid authenticatedPatientId,
+            Guid userId,
             BookAppointmentDto dto,
             CancellationToken cancellationToken = default)
         {
             // Validate patient exists
-            var patient = await _unitOfWork.Patients.GetByIdAsync(authenticatedPatientId, cancellationToken);
+            var patient = await _unitOfWork.Patients.GetByUserIdAsync(userId, cancellationToken);
             if (patient == null)
                 throw new UnauthorizedAccessException("Patient not found");
 
@@ -73,83 +74,93 @@ namespace Smart_Medc.Application.Implementation
 
             Guid? shareCodeId = null;
 
-            // Begin transaction for multi-entity operation
-            await _unitOfWork.BeginTransactionAsync(cancellationToken);
-
-            try
+            var strategy = _unitOfWork.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
             {
-                if (dto.ShareRecords && dto.RecordsToShare.Any())
-                {
-                    // Generate share code
-                    var codeDto = await _dataSharingService.GenerateShareCodeAsync(
-                        authenticatedPatientId,
-                        new DTOs.DataSharing.GenerateShareCodeDto
-                        {
-                            ExpirationType = "ThirtyDays",
-                            SpecificRecordIds = dto.RecordsToShare
-                        },
-                        cancellationToken);
+                // Begin transaction for multi-entity operation
+                await _unitOfWork.BeginTransactionAsync(cancellationToken);
 
-                    shareCodeId = codeDto.Id;
+                try
+                {
+                    if (dto.ShareRecords && dto.RecordsToShare.Any())
+                    {
+                        // Generate share code
+                        var codeDto = await _dataSharingService.GenerateShareCodeAsync(
+                            userId,
+                            new DTOs.DataSharing.GenerateShareCodeDto
+                            {
+                                ExpirationType = "ThirtyDays",
+                                SpecificRecordIds = dto.RecordsToShare
+                            },
+                            cancellationToken);
+
+                        shareCodeId = codeDto.Id;
+                    }
+
+                    // Generate unique appointment number
+                    var appointmentNumber = await GenerateUniqueAppointmentNumberAsync(cancellationToken);
+
+                    var appointment = new Appointment
+                    {
+                        Id = Guid.NewGuid(),
+                        AppointmentNumber = appointmentNumber,
+                        PatientId = patient.Id,
+                        OrganizationId = dto.OrganizationId,
+                        DoctorId = dto.DoctorId,
+                        AppointmentDate = dto.Date.Date,
+                        StartTime = dto.StartTime,
+                        EndTime = endTime,
+                        DurationMinutes = durationMinutes,
+                        Type = visitType,
+                        ReasonForVisit = dto.Reason,
+                        Status = AppointmentStatus.Pending,
+                        IsRecordsShared = dto.ShareRecords,
+                        DataShareCodeId = shareCodeId,
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    await _unitOfWork.Appointments.AddAsync(appointment, cancellationToken);
+
+                    // Add status history
+                    await _unitOfWork.AppointmentStatusHistories.AddAsync(new AppointmentStatusHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        AppointmentId = appointment.Id,
+                        FromStatus = AppointmentStatus.Pending,
+                        ToStatus = AppointmentStatus.Pending,
+                        Reason = "Appointment created",
+                        CreatedAt = DateTime.UtcNow
+                    }, cancellationToken);
+
+                    await _unitOfWork.SaveChangesAsync(cancellationToken);
+                    await _unitOfWork.CommitTransactionAsync(cancellationToken);
+
+                    // Reload with navigation properties for mapping
+                    appointment = await _unitOfWork.Appointments.GetByIdAsync(appointment.Id, cancellationToken);
+
+                    return _mapper.Map<AppointmentDto>(appointment);
                 }
-
-                // Generate unique appointment number
-                var appointmentNumber = await GenerateUniqueAppointmentNumberAsync(cancellationToken);
-
-                var appointment = new Appointment
+                catch
                 {
-                    Id = Guid.NewGuid(),
-                    AppointmentNumber = appointmentNumber,
-                    PatientId = authenticatedPatientId,
-                    OrganizationId = dto.OrganizationId,
-                    DoctorId = dto.DoctorId,
-                    AppointmentDate = dto.Date.Date,
-                    StartTime = dto.StartTime,
-                    EndTime = endTime,
-                    DurationMinutes = durationMinutes,
-                    Type = visitType,
-                    ReasonForVisit = dto.Reason,
-                    Status = AppointmentStatus.Pending,
-                    IsRecordsShared = dto.ShareRecords,
-                    DataShareCodeId = shareCodeId,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                await _unitOfWork.Appointments.AddAsync(appointment, cancellationToken);
-
-                // Add status history
-                await _unitOfWork.AppointmentStatusHistories.AddAsync(new AppointmentStatusHistory
-                {
-                    Id = Guid.NewGuid(),
-                    AppointmentId = appointment.Id,
-                    FromStatus = AppointmentStatus.Pending,
-                    ToStatus = AppointmentStatus.Pending,
-                    Reason = "Appointment created",
-                    CreatedAt = DateTime.UtcNow
-                }, cancellationToken);
-
-                await _unitOfWork.SaveChangesAsync(cancellationToken);
-                await _unitOfWork.CommitTransactionAsync(cancellationToken);
-
-                // Reload with navigation properties for mapping
-                appointment = await _unitOfWork.Appointments.GetByIdAsync(appointment.Id, cancellationToken);
-
-                return _mapper.Map<AppointmentDto>(appointment);
-            }
-            catch
-            {
-                await _unitOfWork.RollbackTransactionAsync(cancellationToken);
-                throw;
-            }
+                    await _unitOfWork.RollbackTransactionAsync(cancellationToken);
+                    throw;
+                }
+            });
         }
 
         public async Task<PagedResult<AppointmentDto>> GetPatientAppointmentsAsync(
             Guid patientId,
+            Guid authenticatedUserId,
             string? status = null,
             int pageNumber = 1,
             int pageSize = 20,
             CancellationToken cancellationToken = default)
         {
+            // Validate patient exists
+            var patient = await _unitOfWork.Patients.GetByIdAsync(patientId, cancellationToken);
+            if (patient == null || patient.UserId != authenticatedUserId)
+                throw new UnauthorizedAccessException("You are not authorized to access this patient's appointments");
+
             // Validate pagination parameters
             if (pageNumber < 1)
                 pageNumber = 1;
@@ -230,6 +241,87 @@ namespace Smart_Medc.Application.Implementation
             return _mapper.Map<AppointmentDetailDto>(appointment);
         }
 
+        public async Task RescheduleAppointmentAsync(
+            Guid appointmentId,
+            Guid requestingUserId,
+            RescheduleAppointmentDto dto,
+            CancellationToken cancellationToken = default)
+        {
+            // Retreive Appointment
+            var appointment = await _unitOfWork.Appointments.GetByIdAsync(appointmentId, cancellationToken);
+            if (appointment == null)
+                throw new KeyNotFoundException("Appointment not found");
+
+            // Validate status
+            if (appointment.Status == AppointmentStatus.Completed ||
+                appointment.Status == AppointmentStatus.Cancelled)
+                throw new InvalidOperationException("Cannot reschedule completed or cancelled appointments");
+
+            // Authorization check
+            var user = await _unitOfWork.Users.GetByIdAsync(requestingUserId, cancellationToken);
+            if (user == null)
+                throw new UnauthorizedAccessException("User not found");
+
+            // Verify Patient User (Users Only Can Reschedule)
+            bool isPatient = false;
+            if (user.UserType == UserType.Patient)
+            {
+                var patient = await _unitOfWork.Patients.GetByUserIdAsync(requestingUserId, cancellationToken);
+                isPatient = patient?.Id == appointment.PatientId;
+                if (!isPatient)
+                    throw new UnauthorizedAccessException("You don't have permission to reschedule this appointment");
+            }
+            else
+            {
+                throw new UnauthorizedAccessException("Only patients can reschedule appointments");
+            }
+
+            // Check organization reschedule limit
+            var organization = await _unitOfWork.Organizations.GetByIdAsync(appointment.OrganizationId, cancellationToken);
+            if (appointment.RescheduleCount >= organization?.MaxReschedulesAllowed)
+                throw new InvalidOperationException($"Maximum reschedule limit ({organization.MaxReschedulesAllowed}) reached");
+
+            // Check availability for new slot
+            var durationMinutes = appointment.DurationMinutes > 0 ? appointment.DurationMinutes : 30; // fixed 30 (can be replaced with organization policy)
+            var newEndTime = dto.NewStartTime.AddMinutes(durationMinutes);
+
+            var conflict = await _unitOfWork.Appointments.HasConflictingAppointmentAsync(
+                appointment.OrganizationId,
+                dto.NewDate,
+                dto.NewStartTime.ToTimeSpan(),
+                newEndTime.ToTimeSpan(),
+                excludeAppointmentId: appointmentId,
+                cancellationToken: cancellationToken
+            );
+
+            if (conflict)
+                throw new InvalidOperationException("The new time slot is not available");
+
+            var oldStatus = appointment.Status;
+
+            appointment.AppointmentDate = dto.NewDate.Date;
+            appointment.StartTime = dto.NewStartTime;
+            appointment.EndTime = newEndTime;
+            appointment.RescheduleCount++;
+            appointment.Status = AppointmentStatus.Pending; // Reset to pending for org approval
+            appointment.UpdatedAt = DateTime.UtcNow;
+
+            // Add status history with correct old status
+            await _unitOfWork.AppointmentStatusHistories.AddAsync(new AppointmentStatusHistory
+            {
+                Id = Guid.NewGuid(),
+                AppointmentId = appointmentId,
+                FromStatus = oldStatus,
+                ToStatus = AppointmentStatus.Pending,
+                Reason = $"Rescheduled by patient. {dto.Reason}",
+                ChangedByUserId = requestingUserId,
+                CreatedAt = DateTime.UtcNow
+            }, cancellationToken);
+
+            await _unitOfWork.Appointments.UpdateAsync(appointment, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+
         public async Task CancelAppointmentAsync(
             Guid appointmentId,
             Guid requestingUserId,
@@ -281,87 +373,6 @@ namespace Smart_Medc.Application.Implementation
                 FromStatus = oldStatus,
                 ToStatus = AppointmentStatus.Cancelled,
                 Reason = dto.Reason,
-                ChangedByUserId = requestingUserId,
-                CreatedAt = DateTime.UtcNow
-            }, cancellationToken);
-
-            await _unitOfWork.Appointments.UpdateAsync(appointment, cancellationToken);
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-
-        public async Task RescheduleAppointmentAsync(
-            Guid appointmentId,
-            Guid requestingUserId,
-            RescheduleAppointmentDto dto,
-            CancellationToken cancellationToken = default)
-        {
-            // Retreive Appointment
-            var appointment = await _unitOfWork.Appointments.GetByIdAsync(appointmentId, cancellationToken);
-            if (appointment == null)
-                throw new KeyNotFoundException("Appointment not found");
-
-            // Validate status
-            if (appointment.Status == AppointmentStatus.Completed ||
-                appointment.Status == AppointmentStatus.Cancelled)
-                throw new InvalidOperationException("Cannot reschedule completed or cancelled appointments");
-
-            // Authorization check
-            var user = await _unitOfWork.Users.GetByIdAsync(requestingUserId, cancellationToken);
-            if (user == null)
-                throw new UnauthorizedAccessException("User not found");
-
-            // Verify Patient User (Users Only Can Reschedule)
-            bool isPatient = false;
-            if (user.UserType == UserType.Patient)
-            {
-                var patient = await _unitOfWork.Patients.GetByUserIdAsync(requestingUserId, cancellationToken);
-                isPatient = patient?.Id == appointment.PatientId;
-                if (!isPatient)
-                    throw new UnauthorizedAccessException("You don't have permission to reschedule this appointment");
-            }
-            else
-            {
-                throw new UnauthorizedAccessException("Only patients can reschedule appointments");
-            }
-
-            // Check organization reschedule limit
-            var organization = await _unitOfWork.Organizations.GetByIdAsync(appointment.OrganizationId, cancellationToken);
-            if (appointment.RescheduleCount >= organization.MaxReschedulesAllowed)
-                throw new InvalidOperationException($"Maximum reschedule limit ({organization.MaxReschedulesAllowed}) reached");
-
-            // Check availability for new slot
-            var durationMinutes = appointment.DurationMinutes > 0 ? appointment.DurationMinutes : 30; // fixed 30 (can be replaced with organization policy)
-            var newEndTime = dto.NewStartTime.AddMinutes(durationMinutes);
-
-            var conflict = await _unitOfWork.Appointments.HasConflictingAppointmentAsync(
-                appointment.OrganizationId,
-                dto.NewDate,
-                dto.NewStartTime.ToTimeSpan(),
-                newEndTime.ToTimeSpan(),
-                excludeAppointmentId: appointmentId,
-                cancellationToken: cancellationToken
-            );
-
-            if (conflict)
-                throw new InvalidOperationException("The new time slot is not available");
-
-            var oldStatus = appointment.Status;
-
-            appointment.AppointmentDate = dto.NewDate.Date;
-            appointment.StartTime = dto.NewStartTime;
-            appointment.EndTime = newEndTime;
-            appointment.RescheduleCount++;
-            appointment.Status = AppointmentStatus.Pending; // Reset to pending for org approval
-            appointment.UpdatedAt = DateTime.UtcNow;
-
-            // Add status history with correct old status
-            await _unitOfWork.AppointmentStatusHistories.AddAsync(new AppointmentStatusHistory
-            {
-                Id = Guid.NewGuid(),
-                AppointmentId = appointmentId,
-                FromStatus = oldStatus,
-                ToStatus = AppointmentStatus.Pending,
-                Reason = $"Rescheduled by patient. {dto.Reason}",
                 ChangedByUserId = requestingUserId,
                 CreatedAt = DateTime.UtcNow
             }, cancellationToken);
