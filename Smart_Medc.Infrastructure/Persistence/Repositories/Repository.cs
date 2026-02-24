@@ -21,7 +21,6 @@ namespace Smart_Medc.Infrastructure.Persistence.Repositories
             _context = context;
             _dbSet = context.Set<T>();
         }
-
         // Query
         public virtual async Task<T?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
         {

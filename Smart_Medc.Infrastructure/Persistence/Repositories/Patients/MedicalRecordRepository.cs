@@ -31,10 +31,9 @@ namespace Smart_Medc.Infrastructure.Persistence.Repositories.Patients
             Guid recordId,
             CancellationToken cancellationToken = default)
         {
-            return await _dbSet
-                .Include(mr => mr.Documents.Where(d => !d.IsDeleted))
-                .FirstOrDefaultAsync(mr => mr.Id == recordId && !mr.IsDeleted,
-                                    cancellationToken);
+            return await _context.MedicalRecords
+                .Include(r => r.Documents.Where(d => !d.IsDeleted))
+                .FirstOrDefaultAsync(r => r.Id == recordId, cancellationToken);
         }
 
         public async Task<IEnumerable<MedicalRecord>> GetByPatientIdAndTypeAsync(

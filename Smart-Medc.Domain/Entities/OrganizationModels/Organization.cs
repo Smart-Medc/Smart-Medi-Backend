@@ -55,7 +55,4 @@ namespace Smart_Medc.Domain.Entities.OrganizationModels
         public virtual ICollection<OrganizationNotification> Notifications { get; set; } = new List<OrganizationNotification>();
     }
 
-    
-
-    
 }
