@@ -34,8 +34,8 @@ namespace Smart_Medc.API.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            //if (!ModelState.IsValid)
+            //    return BadRequest(ModelState);
 
             var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
             var result = await _authService.LoginAsync(request, ipAddress);
@@ -93,8 +93,8 @@ namespace Smart_Medc.API.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> RegisterPatient([FromBody] RegisterPatientRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            //if (!ModelState.IsValid)
+            //    return BadRequest(ModelState);
 
             var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
             var result = await _authService.RegisterPatientAsync(request, ipAddress);
@@ -124,8 +124,8 @@ namespace Smart_Medc.API.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            //if (!ModelState.IsValid)
+            //    return BadRequest(ModelState);
 
             var result = await _authService.VerifyEmailAsync(request);
 
@@ -157,8 +157,8 @@ namespace Smart_Medc.API.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> ResendVerificationOtp([FromBody] ResendOtpRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            //if (!ModelState.IsValid)
+            //    return BadRequest(ModelState);
 
             var result = await _authService.ResendEmailVerificationOtpAsync(request);
 
@@ -196,8 +196,8 @@ namespace Smart_Medc.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> RegisterOrganization([FromForm] RegisterOrganizationRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(new { success = false, message = "Invalid request", errors = ModelState });
+            //if (!ModelState.IsValid)
+            //    return BadRequest(new { success = false, message = "Invalid request", errors = ModelState });
 
             var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
             var result = await _authService.RegisterOrganizationAsync(request, ipAddress);
@@ -222,8 +222,8 @@ namespace Smart_Medc.API.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> RefreshToken()
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            //if (!ModelState.IsValid)
+            //    return BadRequest(ModelState);
 
             var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
 
@@ -305,8 +305,8 @@ namespace Smart_Medc.API.Controllers
         [Authorize]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            //if (!ModelState.IsValid)
+            //    return BadRequest(ModelState);
 
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var userGuid))
@@ -463,8 +463,8 @@ namespace Smart_Medc.API.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            //if (!ModelState.IsValid)
+            //    return BadRequest(ModelState);
 
             var result = await _authService.ForgotPasswordAsync(request);
 
@@ -489,8 +489,8 @@ namespace Smart_Medc.API.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> VerifyPasswordResetCode([FromBody] VerifyPasswordResetCodeRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            //if (!ModelState.IsValid)
+            //    return BadRequest(ModelState);
 
             var result = await _authService.VerifyPasswordResetCodeAsync(request);
 
@@ -514,8 +514,8 @@ namespace Smart_Medc.API.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            //if (!ModelState.IsValid)
+            //    return BadRequest(ModelState);
 
             var result = await _authService.ResetPasswordAsync(request);
 
@@ -539,8 +539,8 @@ namespace Smart_Medc.API.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> ResendPasswordResetCode([FromBody] ForgotPasswordRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            //if (!ModelState.IsValid)
+            //    return BadRequest(ModelState);
 
             var result = await _authService.ForgotPasswordAsync(request);
 
@@ -581,8 +581,8 @@ namespace Smart_Medc.API.Controllers
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> Enable2FAAuthenticator([FromBody] Enable2FARequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            //if (!ModelState.IsValid)
+            //    return BadRequest(ModelState);
 
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var userGuid))
@@ -623,8 +623,8 @@ namespace Smart_Medc.API.Controllers
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> Verify2FASetup([FromBody] Verify2FASetupRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            //if (!ModelState.IsValid)
+            //    return BadRequest(ModelState);
 
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var userGuid))
@@ -660,8 +660,8 @@ namespace Smart_Medc.API.Controllers
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> Disable2FAAuthenticator([FromBody] Disable2FARequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            //if (!ModelState.IsValid)
+            //    return BadRequest(ModelState);
 
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var userGuid))
@@ -731,8 +731,8 @@ namespace Smart_Medc.API.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> Verify2FALogin([FromBody] Verify2FALoginRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            //if (!ModelState.IsValid)
+            //    return BadRequest(ModelState);
 
             var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
             var result = await _authService.Verify2FALoginAsync(request, ipAddress);

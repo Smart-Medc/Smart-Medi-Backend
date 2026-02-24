@@ -2,7 +2,9 @@ using System.Text.Json.Serialization;
 using HealthChecks.UI.Client;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi.Models;
+using Smart_Medc.API.Filters;
 using Smart_Medc.API.ServiceCollectionExtension;
 using Smart_Medc.Application.ServiceCollectionExtension;
 using Smart_Medc.Infrastructure.Persistence.Seeders;
@@ -17,7 +19,7 @@ namespace Smart_Medc.API
             var builder = WebApplication.CreateBuilder(args);
 
             // Add services to the container
-            builder.Services.AddControllers()
+            builder.Services.AddControllers(option => option.Filters.Add<GlobalValidationFilter>())
                 .AddJsonOptions(options =>
                 {
                     options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
@@ -31,6 +33,12 @@ namespace Smart_Medc.API
 
             // Register Api Services
             builder.Services.AddApiServices(builder.Configuration);
+
+            // Disable automatic validation for asp.net core and enabled GlobalValidationFilter instead
+            builder.Services.Configure<ApiBehaviorOptions>(options =>
+            {
+                options.SuppressModelStateInvalidFilter = true;
+            });
 
             // Configure OpenAPI/Swagger
             builder.Services.AddEndpointsApiExplorer();
@@ -83,7 +91,8 @@ namespace Smart_Medc.API
                             "http://localhost:3000",
                             "http://localhost:5173",
                             "http://localhost:5278",
-                            "https://localhost:7278"
+                            "https://localhost:7278",
+                            "https://admin-dashboard-sigma-one-74.vercel.app" // for production admin dashboard
                           )
                           .AllowAnyMethod()
                           .AllowAnyHeader()
@@ -105,7 +114,7 @@ namespace Smart_Medc.API
             }
 
             // Configure the HTTP request pipeline
-            if (app.Environment.IsDevelopment())
+            if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
             {
                 app.UseSwagger();
                 app.UseSwaggerUI(c =>
