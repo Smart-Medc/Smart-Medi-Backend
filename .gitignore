@@ -110,3 +110,14 @@ docker-compose.override.yml
 !Directory.Packages.props
 !Directory.Build.props
 !packages.lock.json
+
+################################################################
+# Ignore all user-uploaded files, but keep the folder structure
+################################################################
+wwwroot/uploads/
+uploads/
+
+# Keep empty folders tracked using .gitkeep
+!wwwroot/uploads/.gitkeep
+!uploads/.gitkeep
+
