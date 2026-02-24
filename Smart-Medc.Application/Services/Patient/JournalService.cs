@@ -7,7 +7,7 @@ using Smart_Medc.Application.Interfaces;
 using Smart_Medc.Domain.Entities.PatientModels;
 using Smart_Medc.Domain.Interfaces.Repositories;
 
-namespace Smart_Medc.Application.Services
+namespace Smart_Medc.Application.Services.Patient
 {
     public class JournalService : IJournalService
     {

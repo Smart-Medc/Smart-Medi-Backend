@@ -19,7 +19,7 @@ namespace Smart_Medc.Application.Services
         private readonly IUnitOfWork _unitOfWork;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IEmailService _emailService;
-        private readonly IFileStorageService _fileStorage;
+        private readonly ILocalFileStorageService _fileStorage;
         private readonly ILogger<AdminService> _logger;
         private readonly IConfiguration _configuration;
         private readonly ITokenService _tokenService;
@@ -28,7 +28,7 @@ namespace Smart_Medc.Application.Services
             IUnitOfWork unitOfWork,
             UserManager<ApplicationUser> userManager,
             IEmailService emailService,
-            IFileStorageService fileStorage,
+            ILocalFileStorageService fileStorage,
             ILogger<AdminService> logger,
             ITokenService tokenService,
             IConfiguration configuration)

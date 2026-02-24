@@ -2,7 +2,7 @@
 
 namespace Smart_Medc.Application.Interfaces.Storage
 {
-    public interface IFileStorageService
+    public interface ILocalFileStorageService
     {
         Task<(bool Success, string? FilePath, string? ErrorMessage)> UploadFileAsync(
             IFormFile file,

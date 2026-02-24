@@ -7,7 +7,7 @@ using Smart_Medc.Domain.Enums;
 using Smart_Medc.Domain.Interfaces.Repositories;
 
 
-namespace Smart_Medc.Application.Services
+namespace Smart_Medc.Application.Services.Patient
 {
     public class MedicationService : IMedicationService
     {

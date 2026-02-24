@@ -40,7 +40,7 @@ namespace Smart_Medc.Application.Services.Auth
             IEmailService emailService,
             ILogger<AuthenticationService> logger,
             IGoogleAuthenticatorService googleAuthService,
-            IFileStorageService fileStorage,
+            ILocalFileStorageService fileStorage,
             IAdminService adminService,
             OrganizationDocumentService organizationDocumentService)
         {
@@ -170,7 +170,7 @@ namespace Smart_Medc.Application.Services.Auth
 
             await _userManager.AddToRoleAsync(user, AppRoles.Patient);
 
-            var patient = new Patient
+            var patient = new Domain.Entities.PatientModels.Patient
             {
                 Id = Guid.NewGuid(),
                 UserId = user.Id,
@@ -231,7 +231,7 @@ namespace Smart_Medc.Application.Services.Auth
 
                 await _userManager.AddToRoleAsync(user, AppRoles.Organization);
 
-                var organization = new Organization
+                var organization = new Domain.Entities.OrganizationModels.Organization
                 {
                     Id = Guid.NewGuid(),
                     UserId = user.Id,

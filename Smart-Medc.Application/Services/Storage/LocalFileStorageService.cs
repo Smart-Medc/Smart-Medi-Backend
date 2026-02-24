@@ -5,7 +5,7 @@ using Smart_Medc.Application.Interfaces.Storage;
 
 namespace Smart_Medc.Application.Services.Storage
 {
-    public class LocalFileStorageService : IFileStorageService
+    public class LocalFileStorageService : ILocalFileStorageService
     {
         private readonly IWebHostEnvironment _environment;
         private readonly ILogger<LocalFileStorageService> _logger;

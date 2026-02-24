@@ -9,7 +9,7 @@ using Smart_Medc.Domain.Enums;
 using Smart_Medc.Domain.Interfaces.Repositories;
 
 
-namespace Smart_Medc.Application.Services
+namespace Smart_Medc.Application.Services.Patient
 {
     public class MedicalRecordService : IMedicalRecordService
     {
@@ -47,8 +47,8 @@ namespace Smart_Medc.Application.Services
                 var term = query.SearchTerm.ToLower();
                 recordsQuery = recordsQuery.Where(r =>
                     r.Title.ToLower().Contains(term) ||
-                    (r.Description != null && r.Description.ToLower().Contains(term)) ||
-                    (r.ProviderName != null && r.ProviderName.ToLower().Contains(term)));
+                    r.Description != null && r.Description.ToLower().Contains(term) ||
+                    r.ProviderName != null && r.ProviderName.ToLower().Contains(term));
             }
 
             if (query.RecordType.HasValue)

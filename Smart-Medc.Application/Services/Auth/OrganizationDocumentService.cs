@@ -11,7 +11,7 @@ namespace Smart_Medc.Application.Services
     public class OrganizationDocumentService
     {
         private readonly IUnitOfWork _unitOfWork;
-        private readonly IFileStorageService _fileStorage;
+        private readonly ILocalFileStorageService _fileStorage;
         private readonly ILogger<OrganizationDocumentService> _logger;
 
         private readonly string[] _allowedExtensions = { ".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx" };
@@ -19,7 +19,7 @@ namespace Smart_Medc.Application.Services
 
         public OrganizationDocumentService(
             IUnitOfWork unitOfWork,
-            IFileStorageService fileStorage,
+            ILocalFileStorageService fileStorage,
             ILogger<OrganizationDocumentService> logger)
         {
             _unitOfWork = unitOfWork;
