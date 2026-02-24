@@ -1,11 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Smart_Medc.Domain.Entities.DataSharing;
 using Smart_Medc.Domain.Interfaces.Repositories.DataSharing;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Smart_Medc.Infrastructure.Persistence.Repositories.DataSharing
 {
@@ -37,14 +32,26 @@ namespace Smart_Medc.Infrastructure.Persistence.Repositories.DataSharing
                 .FirstOrDefaultAsync(d => d.Code == code, cancellationToken);
         }
 
-        public async Task<IEnumerable<DataShareCode>> GetActiveCodesByPatientIdAsync(
+        public async Task<IEnumerable<DataShareCode>> GetCodesByPatientIdAsync(
             Guid patientId,
+            bool activeOnly = true,
             CancellationToken cancellationToken = default)
         {
-            return await _dbSet
-                .Where(d => d.PatientId == patientId &&
-                           d.Status == Domain.Enums.DataShareStatus.Active)
+            var query = _dbSet
+                .Where(d => d.PatientId == patientId);
+
+            if (activeOnly)
+            {
+                query = query.Where(d => d.Status == Domain.Enums.DataShareStatus.Active);
+            }
+            else
+            {
+                query = query.Where(d => d.Status != Domain.Enums.DataShareStatus.Active);
+            }
+
+            return await query
                 .Include(d => d.RecordAccesses)
+                    .ThenInclude(ra => ra.MedicalRecord)
                 .Include(d => d.AccessLogs)
                 .OrderByDescending(d => d.CreatedAt)
                 .ToListAsync(cancellationToken);
