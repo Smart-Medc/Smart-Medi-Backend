@@ -1,12 +1,16 @@
-﻿using System.Text;
+﻿using Hangfire;
+using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.Tokens;
+using Smart_Medc.API.Hubs;
 using Smart_Medc.Appli.Services.Auth.Handlers;
 using Smart_Medc.Application.Common.Auth.Requirements;
 using Smart_Medc.Application.Common.Constants;
 using Smart_Medc.Application.Configuration;
+using Smart_Medc.Application.Interfaces.Notifications;
 using Smart_Medc.Infrastructure.Services.Auth.Handlers;
+using System.Text;
 
 namespace Smart_Medc.API.ServiceCollectionExtension
 {
@@ -25,6 +29,15 @@ namespace Smart_Medc.API.ServiceCollectionExtension
 
             // Register HttpContextAccessor
             services.AddHttpContextAccessor();
+
+            // Register SignalR configuration 
+            services.AddSignalRConfiguration();
+
+            // Register Hangfire configuration
+            services.AddHangfireConfiguration(configuration);
+
+            // Register Notification infrastructure services (e.g., INotificationHubPusher)
+            services.AddNotificationInfrastructure();
 
             return services;
         }
@@ -93,6 +106,17 @@ namespace Smart_Medc.API.ServiceCollectionExtension
                             message = "You do not have permission to access this resource"
                         });
                         return context.Response.WriteAsync(result);
+                    },
+                    OnMessageReceived = context => // Allow JWT to be passed via query string for SignalR hubs
+                    {
+                        var accessToken = context.Request.Query["access_token"];
+                        var path = context.HttpContext.Request.Path;
+                        if (!string.IsNullOrEmpty(accessToken) &&
+                            path.StartsWithSegments("/hubs/notifications"))
+                        {
+                            context.Token = accessToken;
+                        }
+                        return Task.CompletedTask;
                     }
                 };
             });
@@ -126,6 +150,50 @@ namespace Smart_Medc.API.ServiceCollectionExtension
                     policy.RequireClaim("email_verified", "true"));
             });
 
+            return services;
+        }
+
+        private static IServiceCollection AddSignalRConfiguration(this IServiceCollection services)
+        {
+            services.AddSignalR(options =>
+            {
+                options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+                options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+                options.MaximumReceiveMessageSize = 32 * 1024;
+            });
+            return services;
+        }
+
+        private static IServiceCollection AddHangfireConfiguration(this IServiceCollection services, IConfiguration configuration)
+        {
+            var connectionString = configuration.GetConnectionString("cs")!;
+
+            services.AddHangfire(config => config
+                .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+                .UseSimpleAssemblyNameTypeSerializer()
+                .UseRecommendedSerializerSettings()
+                .UseSqlServerStorage(connectionString, new SqlServerStorageOptions
+                {
+                    SchemaName = "notif_jobs",
+                    CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
+                    SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
+                    QueuePollInterval = TimeSpan.FromSeconds(15),
+                    UseRecommendedIsolationLevel = true,
+                    DisableGlobalLocks = true
+                }));
+
+            services.AddHangfireServer(options =>
+            {
+                options.WorkerCount = 2;
+                options.Queues = new[] { "notifications", "default" };
+            });
+
+            return services;
+        }
+
+        private static IServiceCollection AddNotificationInfrastructure(this IServiceCollection services)
+        {
+            services.AddScoped<INotificationHubPusher, NotificationHubPusher>();
             return services;
         }
     }

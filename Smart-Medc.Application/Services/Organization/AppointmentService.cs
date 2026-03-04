@@ -2,7 +2,9 @@
 using Microsoft.EntityFrameworkCore;
 using Smart_Medc.Application.Common;
 using Smart_Medc.Application.DTOs.Appointment;
+using Smart_Medc.Application.DTOs.Notifications;
 using Smart_Medc.Application.Interfaces;
+using Smart_Medc.Application.Interfaces.Notifications;
 using Smart_Medc.Domain.Entities.AppointmentModels;
 using Smart_Medc.Domain.Enums;
 using Smart_Medc.Domain.Interfaces.Repositories;
@@ -14,15 +16,18 @@ namespace Smart_Medc.Application.Services.Organization
         private readonly IUnitOfWork _unitOfWork;
         private readonly IMapper _mapper;
         private readonly IDataSharingService _dataSharingService;
+        private readonly INotificationService _notificationService;
 
         public AppointmentService(
             IUnitOfWork unitOfWork,
             IMapper mapper,
-            IDataSharingService dataSharingService)
+            IDataSharingService dataSharingService,
+            INotificationService notificationService)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
             _dataSharingService = dataSharingService;
+            _notificationService = notificationService;
         }
 
         // =========================
@@ -134,6 +139,10 @@ namespace Smart_Medc.Application.Services.Organization
 
                     await _unitOfWork.SaveChangesAsync(cancellationToken);
                     await _unitOfWork.CommitTransactionAsync(cancellationToken);
+
+                    // Notify Organization about the new appointment request
+                    await _notificationService.NotifyAppointmentStatusChangedAsync(
+                        appointment.Id, AppointmentStatus.Pending, null, cancellationToken);
 
                     // Reload with navigation properties for mapping
                     appointment = await _unitOfWork.Appointments.GetByIdAsync(appointment.Id, cancellationToken);
@@ -320,6 +329,18 @@ namespace Smart_Medc.Application.Services.Organization
 
             await _unitOfWork.Appointments.UpdateAsync(appointment, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            // Notify organization about reschedule
+            await _notificationService.SendToOrganizationAsync(new CreateOrganizationNotificationDto
+            {
+                OrganizationId = appointment.OrganizationId,
+                Type = OrganizationNotificationType.AppointmentRescheduled,
+                Priority = NotificationPriority.Normal,
+                Title = "Appointment Rescheduled",
+                Message = $"A patient rescheduled their appointment to {dto.NewDate:MMM dd, yyyy} at {dto.NewStartTime:hh\\:mm tt}.",
+                ActionUrl = $"/org/appointments/{appointmentId}",
+                Data = $"{{\"appointmentId\":\"{appointmentId}\"}}"
+            }, cancellationToken);
         }
 
         public async Task CancelAppointmentAsync(
@@ -379,6 +400,34 @@ namespace Smart_Medc.Application.Services.Organization
 
             await _unitOfWork.Appointments.UpdateAsync(appointment, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            // Notify the OTHER side — whoever didn't cancel gets notified
+            if (user.UserType == UserType.Patient)
+            {
+                await _notificationService.SendToOrganizationAsync(new CreateOrganizationNotificationDto
+                {
+                    OrganizationId = appointment.OrganizationId,
+                    Type = OrganizationNotificationType.AppointmentCancelled,
+                    Priority = NotificationPriority.Normal,
+                    Title = "Appointment Cancelled by Patient",
+                    Message = $"A patient cancelled their appointment. Reason: {dto.Reason}",
+                    ActionUrl = $"/org/appointments/{appointmentId}",
+                    Data = $"{{\"appointmentId\":\"{appointmentId}\"}}"
+                }, cancellationToken);
+            }
+            else if (user.UserType == UserType.Organization)
+            {
+                await _notificationService.SendToPatientAsync(new CreatePatientNotificationDto
+                {
+                    PatientId = appointment.PatientId,
+                    Type = PatientNotificationType.AppointmentCancellation,
+                    Priority = NotificationPriority.High,
+                    Title = "Appointment Cancelled",
+                    Message = $"Your appointment has been cancelled by the provider. Reason: {dto.Reason}",
+                    ActionUrl = $"/appointments/{appointmentId}",
+                    Data = $"{{\"appointmentId\":\"{appointmentId}\"}}"
+                }, cancellationToken);
+            }
         }
 
         // =========================
@@ -569,6 +618,19 @@ namespace Smart_Medc.Application.Services.Organization
             await _unitOfWork.Appointments.UpdateAsync(appointment, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+            // Notify patient about confirmation
+            await _notificationService.SendToPatientAsync(new CreatePatientNotificationDto
+            {
+                PatientId = appointment.PatientId,
+                Type = PatientNotificationType.AppointmentConfirmation,
+                Priority = NotificationPriority.High,
+                Title = "Appointment Confirmed",
+                Message = $"Your appointment on {appointment.AppointmentDate:MMM dd, yyyy} at {appointment.StartTime:hh\\:mm tt} has been confirmed." +
+              (string.IsNullOrEmpty(dto.PreparationInstructions) ? "" : $" Preparation: {dto.PreparationInstructions}"),
+                ActionUrl = $"/appointments/{appointmentId}",
+                Data = $"{{\"appointmentId\":\"{appointmentId}\"}}"
+            }, cancellationToken);
+
             return _mapper.Map<AppointmentDto>(appointment);
         }
 
@@ -611,6 +673,18 @@ namespace Smart_Medc.Application.Services.Organization
 
             await _unitOfWork.Appointments.UpdateAsync(appointment, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            // Notify patient about rejection
+            await _notificationService.SendToPatientAsync(new CreatePatientNotificationDto
+            {
+                PatientId = appointment.PatientId,
+                Type = PatientNotificationType.AppointmentCancellation,
+                Priority = NotificationPriority.High,
+                Title = "Appointment Request Rejected",
+                Message = $"Your appointment request was rejected. Reason: {dto.Reason}",
+                ActionUrl = $"/appointments/{appointmentId}",
+                Data = $"{{\"appointmentId\":\"{appointmentId}\"}}"
+            }, cancellationToken);
         }
 
         public async Task CompleteAppointmentAsync(
@@ -651,6 +725,18 @@ namespace Smart_Medc.Application.Services.Organization
 
             await _unitOfWork.Appointments.UpdateAsync(appointment, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            // Notify patient about completion
+            await _notificationService.SendToPatientAsync(new CreatePatientNotificationDto
+            {
+                PatientId = appointment.PatientId,
+                Type = PatientNotificationType.SystemNotification,
+                Priority = NotificationPriority.Low,
+                Title = "Appointment Completed",
+                Message = $"Your appointment on {appointment.AppointmentDate:MMM dd, yyyy} has been marked as completed.",
+                ActionUrl = $"/appointments/{appointmentId}",
+                Data = $"{{\"appointmentId\":\"{appointmentId}\"}}"
+            }, cancellationToken);
         }
 
         public async Task MarkNoShowAsync(
@@ -688,6 +774,18 @@ namespace Smart_Medc.Application.Services.Organization
 
             await _unitOfWork.Appointments.UpdateAsync(appointment, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            // Notify patient about no-show
+            await _notificationService.SendToPatientAsync(new CreatePatientNotificationDto
+            {
+                PatientId = appointment.PatientId,
+                Type = PatientNotificationType.SystemNotification,
+                Priority = NotificationPriority.Normal,
+                Title = "Missed Appointment",
+                Message = $"You were marked as a no-show for your appointment on {appointment.AppointmentDate:MMM dd, yyyy} at {appointment.StartTime:hh\\:mm tt}.",
+                ActionUrl = $"/appointments/{appointmentId}",
+                Data = $"{{\"appointmentId\":\"{appointmentId}\"}}"
+            }, cancellationToken);
         }
 
         // Helper method for unique appointment number generation

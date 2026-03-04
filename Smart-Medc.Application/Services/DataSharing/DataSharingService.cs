@@ -1,9 +1,10 @@
 ﻿using AutoMapper;
 using Smart_Medc.Application.Common;
 using Smart_Medc.Application.DTOs.DataSharing;
+using Smart_Medc.Application.DTOs.Notifications;
 using Smart_Medc.Application.Interfaces;
+using Smart_Medc.Application.Interfaces.Notifications;
 using Smart_Medc.Domain.Entities.DataSharing;
-using Smart_Medc.Domain.Entities.OrganizationModels;
 using Smart_Medc.Domain.Enums;
 using Smart_Medc.Domain.Interfaces.Repositories;
 
@@ -14,12 +15,17 @@ namespace Smart_Medc.Application.Services.DataSharing
         private readonly IUnitOfWork _unitOfWork;
         private readonly IMapper _mapper;
         private readonly string _baseShareUrl; // Should be injected from configuration
+        private readonly INotificationService _notificationService;
 
-        public DataSharingService(IUnitOfWork unitOfWork, IMapper mapper)
+        public DataSharingService(
+            IUnitOfWork unitOfWork,
+            IMapper mapper,
+            INotificationService notificationService)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
-            _baseShareUrl = "https://smartmedi.com/share"; // TODO: Inject from config
+            _notificationService = notificationService;
+            _baseShareUrl = "https://smartmedi.com/share";
         }
 
         public async Task<DataShareCodeDto> GenerateShareCodeAsync(
@@ -252,6 +258,20 @@ namespace Smart_Medc.Application.Services.DataSharing
             await _unitOfWork.DataShareAccessLogs.AddAsync(accessLog, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+            // Send notification to patient about access
+            await _notificationService.SendToPatientAsync(new CreatePatientNotificationDto
+            {
+                PatientId = entity.PatientId,
+                Type = PatientNotificationType.RecordAccess,
+                Priority = NotificationPriority.Normal,
+                Title = "Your Medical Records Were Accessed",
+                Message = organization != null
+                    ? $"{organization.Name} accessed your shared medical records."
+                    : "Someone accessed your shared medical records.",
+                ActionUrl = "/data-sharing",
+                Data = $"{{\"shareCodeId\":\"{entity.Id}\",\"code\":\"{entity.Code}\"}}"
+            }, cancellationToken);
+
             // Calculate remaining time
             var remaining = entity.ExpiresAt.HasValue
                 ? (int)(entity.ExpiresAt.Value - DateTime.UtcNow).TotalSeconds
@@ -372,6 +392,20 @@ namespace Smart_Medc.Application.Services.DataSharing
 
             await _unitOfWork.DataShareAccessLogs.AddAsync(accessLog, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            // Send notification to patient about access
+            await _notificationService.SendToPatientAsync(new CreatePatientNotificationDto
+            {
+                PatientId = entity.PatientId,
+                Type = PatientNotificationType.RecordAccess,
+                Priority = NotificationPriority.Normal,
+                Title = "Your Medical Records Were Viewed",
+                Message = organization != null
+                ? $"{organization.Name} viewed your shared medical records."
+                : "Someone viewed your shared medical records.",
+                ActionUrl = "/data-sharing",
+                Data = $"{{\"shareCodeId\":\"{entity.Id}\",\"code\":\"{entity.Code}\"}}"
+            }, cancellationToken);
 
             // Get and filter records
             var records = entity.RecordAccesses

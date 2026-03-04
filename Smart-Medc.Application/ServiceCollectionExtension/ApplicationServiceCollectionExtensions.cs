@@ -1,19 +1,22 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Smart_Medc.Application.Interfaces;
-using Smart_Medc.Application.Services;
+using Smart_Medc.Application.BackgroundJobs;
 using Smart_Medc.Application.Configuration;
+using Smart_Medc.Application.Interfaces;
 using Smart_Medc.Application.Interfaces.Auth;
+using Smart_Medc.Application.Interfaces.Notifications;
 using Smart_Medc.Application.Interfaces.Services;
 using Smart_Medc.Application.Interfaces.Services.Auth;
 using Smart_Medc.Application.Interfaces.Storage;
+using Smart_Medc.Application.Services;
 using Smart_Medc.Application.Services.Auth;
+using Smart_Medc.Application.Services.DataSharing;
+using Smart_Medc.Application.Services.Notifications;
+using Smart_Medc.Application.Services.Organization;
+using Smart_Medc.Application.Services.Patient;
 using Smart_Medc.Application.Services.Storage;
 using Smart_Medc.Domain.Interfaces.Services.Auth;
 using Smart_Medc.Infrastructure.Services.Auth;
-using Smart_Medc.Application.Services.Patient;
-using Smart_Medc.Application.Services.Organization;
-using Smart_Medc.Application.Services.DataSharing;
 
 namespace Smart_Medc.Application.ServiceCollectionExtension
 {
@@ -47,14 +50,23 @@ namespace Smart_Medc.Application.ServiceCollectionExtension
             // Register Admin Service
             services.AddScoped<IAdminService, AdminService>();
 
+            // Register AutoMapper 
             services.AddAutoMapperConfig();
+
+            // Register Patient Services
             services.AddPatientServices();
 
+            // Register Appointment Services
             services.AddAppointmentServices();
 
+            // Register Organization Services
             services.AddOrganizationServices();
 
+            // Register Data Sharing Services
             services.AddDataSharingServices();
+
+            // Register Notification Services
+            services.AddNotificationServices();
 
             return services;
         }
@@ -88,6 +100,16 @@ namespace Smart_Medc.Application.ServiceCollectionExtension
         private static IServiceCollection AddDataSharingServices(this IServiceCollection services)
         {
             services.AddScoped<IDataSharingService, DataSharingService>();
+            return services;
+        }
+
+        private static IServiceCollection AddNotificationServices(this IServiceCollection services)
+        {
+            services.AddScoped<INotificationService, NotificationService>();
+            services.AddScoped<AppointmentReminderJob>();
+            services.AddScoped<MedicationReminderJob>();
+            services.AddScoped<AutoRejectAppointmentJob>();
+            services.AddScoped<NotificationCleanupJob>();
             return services;
         }
     }
