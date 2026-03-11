@@ -3,10 +3,12 @@ using HealthChecks.UI.Client;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using Smart_Medc.API.Filters;
 using Smart_Medc.API.ServiceCollectionExtension;
 using Smart_Medc.Application.ServiceCollectionExtension;
+using Smart_Medc.Infrastructure.Persistence;
 using Smart_Medc.Infrastructure.Persistence.Seeders;
 using Smart_Medc.Infrastructure.ServiceCollectionExtension;
 
@@ -103,14 +105,28 @@ namespace Smart_Medc.API
 
             var app = builder.Build();
 
-            // Seed database roles
+            // Apply pending migrations (recreates tables if missing, safe to run every startup)
             using (var scope = app.Services.CreateScope())
             {
                 var services = scope.ServiceProvider;
-                var roleManager = services.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
                 var logger = services.GetRequiredService<ILogger<Program>>();
 
-                await RoleSeeder.SeedRolesAsync(roleManager, logger);
+                try
+                {
+                    var dbContext = services.GetRequiredService<ApplicationDbContext>();
+                    await dbContext.Database.MigrateAsync();
+                    logger.LogInformation("Database migrations applied successfully.");
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to apply database migrations.");
+                    throw;
+                }
+
+                // Seed roles after tables exist
+                var roleManager = services.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
+                var roleLogger = services.GetRequiredService<ILogger<Program>>();
+                await RoleSeeder.SeedRolesAsync(roleManager, roleLogger);
             }
 
             // Configure the HTTP request pipeline
