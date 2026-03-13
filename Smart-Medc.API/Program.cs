@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+using Hangfire;
 using HealthChecks.UI.Client;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
@@ -6,11 +6,14 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using Smart_Medc.API.Filters;
+using Smart_Medc.API.Hubs;
 using Smart_Medc.API.ServiceCollectionExtension;
+using Smart_Medc.Application.BackgroundJobs;
 using Smart_Medc.Application.ServiceCollectionExtension;
 using Smart_Medc.Infrastructure.Persistence;
 using Smart_Medc.Infrastructure.Persistence.Seeders;
 using Smart_Medc.Infrastructure.ServiceCollectionExtension;
+using System.Text.Json.Serialization;
 
 namespace Smart_Medc.API
 {
@@ -175,6 +178,41 @@ namespace Smart_Medc.API
             });
 
             app.MapControllers();
+
+            // Register Notification Module dendencies and SignalR hub
+
+            app.MapHub<NotificationHub>("/hubs/notifications");
+
+            if (app.Environment.IsDevelopment())
+            {
+                app.UseHangfireDashboard("/hangfire");
+            }
+
+            using (var scope = app.Services.CreateScope())
+            {
+                var recurringJobs = scope.ServiceProvider
+                    .GetRequiredService<IRecurringJobManager>();
+
+                recurringJobs.AddOrUpdate<AppointmentReminderJob>(
+                    "appointment-reminders",
+                    job => job.ProcessAsync(CancellationToken.None),
+                    "*/30 * * * *");
+
+                recurringJobs.AddOrUpdate<MedicationReminderJob>(
+                    "medication-reminders",
+                    job => job.ProcessAsync(CancellationToken.None),
+                    "*/5 * * * *");
+
+                recurringJobs.AddOrUpdate<AutoRejectAppointmentJob>(
+                    "auto-reject-appointments",
+                    job => job.ProcessAsync(CancellationToken.None),
+                    "0 * * * *");
+
+                recurringJobs.AddOrUpdate<NotificationCleanupJob>(
+                    "notification-cleanup",
+                    job => job.ProcessAsync(CancellationToken.None),
+                    "0 3 * * *");
+            }
 
             app.Run();
         }

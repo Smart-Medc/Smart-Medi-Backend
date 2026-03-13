@@ -1,7 +1,9 @@
 ﻿using Microsoft.Extensions.Logging;
 using Smart_Medc.Application.Common;
 using Smart_Medc.Application.DTOs.Medications;
+using Smart_Medc.Application.DTOs.Notifications;
 using Smart_Medc.Application.Interfaces;
+using Smart_Medc.Application.Interfaces.Notifications;
 using Smart_Medc.Domain.Entities.PatientModels;
 using Smart_Medc.Domain.Enums;
 using Smart_Medc.Domain.Interfaces.Repositories;
@@ -13,11 +15,16 @@ namespace Smart_Medc.Application.Services.Patient
     {
         private readonly IUnitOfWork _unitOfWork;
         private readonly ILogger<MedicationService> _logger;
+        private readonly INotificationService _notificationService;
 
-        public MedicationService(IUnitOfWork unitOfWork, ILogger<MedicationService> logger)
+        public MedicationService(
+            IUnitOfWork unitOfWork,
+            ILogger<MedicationService> logger,
+            INotificationService notificationService)
         {
             _unitOfWork = unitOfWork;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
         public async Task<ServiceResult<List<MedicationDto>>> GetMedicationsAsync(
@@ -67,6 +74,21 @@ namespace Smart_Medc.Application.Services.Patient
             await _unitOfWork.Medications.AddAsync(medication, ct);
             await _unitOfWork.SaveChangesAsync(ct);
 
+            // Notify user if there are potential interactions with existing medications
+            if (medication.HasInteraction)
+            {
+                await _notificationService.SendToPatientAsync(new CreatePatientNotificationDto
+                {
+                    PatientId = patientId,
+                    Type = PatientNotificationType.AIHealthAlert,
+                    Priority = NotificationPriority.High,
+                    Title = "Medication Interaction Detected",
+                    Message = $"A potential interaction was detected for {medication.Name}. {medication.InteractionNotes}",
+                    ActionUrl = "/medications",
+                    Data = $"{{\"medicationId\":\"{medication.Id}\"}}"
+                }, ct);
+            }
+
             return ServiceResult<MedicationDto>.Success(MapToDto(medication));
         }
 
@@ -89,6 +111,21 @@ namespace Smart_Medc.Application.Services.Patient
 
             await _unitOfWork.Medications.UpdateAsync(medication, ct);
             await _unitOfWork.SaveChangesAsync(ct);
+
+            // Notify user if there are potential interactions with existing medications
+            if (medication.HasInteraction)
+            {
+                await _notificationService.SendToPatientAsync(new CreatePatientNotificationDto
+                {
+                    PatientId = patientId,
+                    Type = PatientNotificationType.AIHealthAlert,
+                    Priority = NotificationPriority.High,
+                    Title = "Medication Interaction Detected",
+                    Message = $"A potential interaction was detected for {medication.Name}. {medication.InteractionNotes}",
+                    ActionUrl = "/medications",
+                    Data = $"{{\"medicationId\":\"{medication.Id}\"}}"
+                }, ct);
+            }
 
             return ServiceResult<MedicationDto>.Success(MapToDto(medication));
         }
