@@ -432,7 +432,7 @@ namespace Smart_Medc.Application.Services.Auth
                 DateTime registrationDate)
         {
             var subject = "🏥 New Organization Registration - Action Required";
-            var dashboardUrl = "https://smartmedi.com/admin/dashboard";
+            var dashboardUrl = "https://admin-dashboard-sigma-one-74.vercel.app/";
 
             var body = $@"
                 <!DOCTYPE html>

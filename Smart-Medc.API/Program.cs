@@ -95,7 +95,7 @@ namespace Smart_Medc.API
                     policy.WithOrigins(
                             "http://localhost:3000",
                             "http://localhost:5173",
-                            "http://localhost:5278",
+                            "http://localhost:5379",
                             "https://localhost:7278",
                             "https://admin-dashboard-sigma-one-74.vercel.app" // for production admin dashboard
                           )
