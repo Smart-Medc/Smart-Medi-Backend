@@ -1,5 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Smart_Medc.Application.Common;
 using Smart_Medc.Application.DTOs.Journal;
@@ -12,7 +11,7 @@ namespace Smart_Medc.Application.Services.Patient
     public class JournalService : IJournalService
     {
         private readonly IUnitOfWork _unitOfWork;
-        private readonly IFileStorageService _fileStorage;
+        //private readonly IFileStorageService _fileStorage;
         private readonly ILogger<JournalService> _logger;
 
         //private const string JournalPhotosContainer = "journal-photos";
@@ -23,11 +22,11 @@ namespace Smart_Medc.Application.Services.Patient
 
         public JournalService(
             IUnitOfWork unitOfWork,
-            IFileStorageService fileStorage,
+            //IFileStorageService fileStorage,
             ILogger<JournalService> logger)
         {
             _unitOfWork = unitOfWork;
-            _fileStorage = fileStorage;
+            // _fileStorage = fileStorage;
             _logger = logger;
         }
 
