@@ -39,7 +39,9 @@ namespace Smart_Medc.Infrastructure.Services.Storage
                 Key = storagePath,
                 InputStream = fileStream,
                 ContentType = contentType,
+                UseChunkEncoding = false
             };
+            putRequest.Headers.ContentLength = fileStream.Length;
 
             await _s3Client.PutObjectAsync(putRequest, cancellationToken);
 

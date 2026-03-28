@@ -297,46 +297,22 @@ namespace Smart_Medc.Application.Services.Patient
         public async Task<ServiceResult<JournalStatisticsDto>> GetStatisticsAsync(
             Guid patientId, DateRangeDto? range, CancellationToken ct = default)
         {
-            var entriesQuery = _unitOfWork.JournalEntries.QueryNoTracking()
+            var baseQuery = _unitOfWork.JournalEntries.QueryNoTracking()
                 .Where(e => e.PatientId == patientId && !e.IsDeleted);
 
-            if (range != null)
-            {
-                entriesQuery = entriesQuery.Where(e =>
-                    e.EntryDate >= range.StartDate && e.EntryDate <= range.EndDate);
-            }
-
-            var entries = await entriesQuery
-                .Include(e => e.Tags)
-                .ToListAsync(ct);
-
-            var now = DateTime.UtcNow;
-            var startOfMonth = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
-
-            var allTags = entries.SelectMany(e => e.Tags.Select(t => t.Tag)).ToList();
-            var allSymptoms = entries
-                .Where(e => !string.IsNullOrWhiteSpace(e.Symptom))
-                .SelectMany(e => e.Symptom!.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                .ToList();
+            // TEMP: return immediate debug-based stats to isolate
+            var entries = await baseQuery.Include(e => e.Tags).ToListAsync(ct);
+            var today = DateTime.UtcNow.Date;
+            var startOfMonth = new DateTime(today.Year, today.Month, 1);
 
             return ServiceResult<JournalStatisticsDto>.Success(new JournalStatisticsDto
             {
                 TotalEntries = entries.Count,
-                EntriesThisMonth = entries.Count(e => e.EntryDate >= startOfMonth),
+                EntriesThisMonth = entries.Count(e => e.EntryDate.Date >= startOfMonth),
                 AverageMood = entries.Where(e => e.MoodLevel.HasValue).Select(e => e.MoodLevel!.Value).DefaultIfEmpty(0).Average(),
                 AveragePain = entries.Where(e => e.PainLevel.HasValue).Select(e => e.PainLevel!.Value).DefaultIfEmpty(0).Average(),
-                MostCommonSymptoms = allSymptoms
-                    .GroupBy(s => s.ToLower())
-                    .OrderByDescending(g => g.Count())
-                    .Take(5)
-                    .Select(g => g.Key)
-                    .ToList(),
-                MostUsedTags = allTags
-                    .GroupBy(t => t.ToLower())
-                    .OrderByDescending(g => g.Count())
-                    .Take(5)
-                    .Select(g => g.Key)
-                    .ToList()
+                MostCommonSymptoms = new List<string>(),
+                MostUsedTags = entries.SelectMany(e => e.Tags.Select(t => t.Tag)).Distinct().ToList()
             });
         }
 
