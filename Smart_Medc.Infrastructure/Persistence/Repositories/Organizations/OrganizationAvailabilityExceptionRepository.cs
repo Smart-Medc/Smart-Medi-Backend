@@ -45,5 +45,25 @@ namespace Smart_Medc.Infrastructure.Persistence.Repositories.Organizations
                 .OrderBy(e => e.Date)
                 .ToListAsync(cancellationToken);
         }
+
+        // ADDED
+        public async Task UpdateAsync(
+            OrganizationAvailabilityException exception,
+            CancellationToken cancellationToken = default)
+        {
+            _dbSet.Update(exception);
+            await Task.CompletedTask;
+        }
+
+        // ADDED
+        public async Task DeleteAsync(
+            Guid exceptionId,
+            CancellationToken cancellationToken = default)
+        {
+            var entity = await _dbSet.FindAsync(
+                new object[] { exceptionId }, cancellationToken);
+            if (entity != null)
+                _dbSet.Remove(entity);
+        }
     }
 }

@@ -2,6 +2,7 @@
 using Smart_Medc.Application.Common;
 using Smart_Medc.Application.DTOs.Organization;
 using Smart_Medc.Application.Interfaces;
+using Smart_Medc.Domain.Entities.OrganizationModels;
 using Smart_Medc.Domain.Enums;
 using Smart_Medc.Domain.Interfaces.Repositories;
 
@@ -279,6 +280,286 @@ namespace Smart_Medc.Application.Services.Organization
             }
 
             return slots;
+        }
+
+        // Add these two methods inside the existing OrganizationService class
+
+        public async Task<List<GetOperatingHoursDto>> GetOperatingHoursAsync(
+            Guid organizationId,
+            CancellationToken cancellationToken = default)
+        {
+            // Validate organization exists
+            var organization = await _unitOfWork.Organizations.GetByIdAsync(
+                organizationId, cancellationToken);
+            if (organization == null)
+                throw new KeyNotFoundException("Organization not found");
+
+            var hours = await _unitOfWork.OrganizationOperatingHours
+                .GetByOrganizationIdAsync(organizationId, cancellationToken);
+
+            // Return all 7 days — if a day has no record yet, return it as closed
+            var allDays = Enum.GetValues<DayOfWeek>();
+            var hoursDict = hours.ToDictionary(h => h.DayOfWeek, h => h);
+
+            return allDays.Select(day =>
+            {
+                if (hoursDict.TryGetValue(day, out var h))
+                {
+                    return new GetOperatingHoursDto
+                    {
+                        Day = day.ToString(),
+                        IsOpen = h.IsOpen,
+                        OpenTime = h.OpenTime.HasValue
+                            ? h.OpenTime.Value.ToString("HH:mm")
+                            : null,
+                        CloseTime = h.CloseTime.HasValue
+                            ? h.CloseTime.Value.ToString("HH:mm")
+                            : null,
+                    };
+                }
+
+                // No record exists for this day — treat as closed
+                return new GetOperatingHoursDto
+                {
+                    Day = day.ToString(),
+                    IsOpen = false,
+                    OpenTime = null,
+                    CloseTime = null,
+                };
+            }).ToList();
+        }
+
+        public async Task UpdateOperatingHoursAsync(
+            Guid organizationId,
+            Guid requestingUserId,
+            UpdateOperatingHoursRequestDto request,
+            CancellationToken cancellationToken = default)
+        {
+            // Validate organization exists
+            var organization = await _unitOfWork.Organizations.GetByIdAsync(
+                organizationId, cancellationToken);
+            if (organization == null)
+                throw new KeyNotFoundException("Organization not found");
+
+            // Verify the requesting user belongs to this organization
+            var user = await _unitOfWork.Organizations.GetByUserIdAsync(
+                requestingUserId, cancellationToken);
+            if (user == null || user.Id != organizationId)
+                throw new UnauthorizedAccessException(
+                    "You are not authorized to update this organization's schedule");
+
+            foreach (var dto in request.Schedule)
+            {
+                // Parse the day string to DayOfWeek enum
+                if (!Enum.TryParse<DayOfWeek>(dto.Day, ignoreCase: true, out var dayOfWeek))
+                    throw new ArgumentException($"Invalid day: {dto.Day}");
+
+                // Validate times when the day is marked as open
+                TimeOnly? openTime = null;
+                TimeOnly? closeTime = null;
+
+                if (dto.IsOpen)
+                {
+                    if (string.IsNullOrWhiteSpace(dto.OpenTime) ||
+                        string.IsNullOrWhiteSpace(dto.CloseTime))
+                        throw new ArgumentException(
+                            $"{dto.Day}: OpenTime and CloseTime are required when the day is open");
+
+                    if (!TimeOnly.TryParse(dto.OpenTime, out var parsedOpen))
+                        throw new ArgumentException($"{dto.Day}: Invalid OpenTime format");
+
+                    if (!TimeOnly.TryParse(dto.CloseTime, out var parsedClose))
+                        throw new ArgumentException($"{dto.Day}: Invalid CloseTime format");
+
+                    if (parsedClose <= parsedOpen)
+                        throw new ArgumentException(
+                            $"{dto.Day}: CloseTime must be after OpenTime");
+
+                    openTime = parsedOpen;
+                    closeTime = parsedClose;
+                }
+
+                // Try to find existing record and upsert
+                var existing = await _unitOfWork.OrganizationOperatingHours
+                    .GetByOrganizationAndDayAsync(organizationId, dayOfWeek, cancellationToken);
+
+                if (existing != null)
+                {
+                    existing.IsOpen = dto.IsOpen;
+                    existing.OpenTime = openTime;
+                    existing.CloseTime = closeTime;
+                    await _unitOfWork.OrganizationOperatingHours.UpdateAsync(
+                        existing, cancellationToken);
+                }
+                else
+                {
+                    var newHours = new OrganizationOperatingHours
+                    {
+                        Id = Guid.NewGuid(),
+                        OrganizationId = organizationId,
+                        DayOfWeek = dayOfWeek,
+                        IsOpen = dto.IsOpen,
+                        OpenTime = openTime,
+                        CloseTime = closeTime,
+                    };
+                    await _unitOfWork.OrganizationOperatingHours.AddAsync(
+                        newHours, cancellationToken);
+                }
+            }
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+
+        // Add these three methods inside the existing OrganizationService class
+
+        public async Task<AvailabilityExceptionDto?> GetExceptionByDateAsync(
+            Guid organizationId,
+            DateTime date,
+            CancellationToken cancellationToken = default)
+        {
+            var organization = await _unitOfWork.Organizations
+                .GetByIdAsync(organizationId, cancellationToken);
+            if (organization == null)
+                throw new KeyNotFoundException("Organization not found");
+
+            var exception = await _unitOfWork.OrganizationAvailabilityExceptions
+                .GetByDateAsync(organizationId, date, cancellationToken);
+
+            if (exception == null)
+                return null;
+
+            return new AvailabilityExceptionDto
+            {
+                Id = exception.Id,
+                Date = exception.Date.ToString("yyyy-MM-dd"),
+                IsFullDayOff = exception.IsFullDayOff,
+                StartTime = exception.StartTime?.ToString("HH:mm"),
+                EndTime = exception.EndTime?.ToString("HH:mm"),
+                Reason = exception.Reason,
+            };
+        }
+
+        public async Task<AvailabilityExceptionDto> UpsertExceptionAsync(
+            Guid organizationId,
+            Guid requestingUserId,
+            DateTime date,
+            UpsertAvailabilityExceptionDto dto,
+            CancellationToken cancellationToken = default)
+        {
+            var organization = await _unitOfWork.Organizations
+                .GetByIdAsync(organizationId, cancellationToken);
+            if (organization == null)
+                throw new KeyNotFoundException("Organization not found");
+
+            // Verify ownership
+            var user = await _unitOfWork.Organizations
+                .GetByUserIdAsync(requestingUserId, cancellationToken);
+            if (user == null || user.Id != organizationId)
+                throw new UnauthorizedAccessException(
+                    "You are not authorized to update this organization's availability");
+
+            // Validate partial-day times when not a full-day-off
+            TimeOnly? startTime = null;
+            TimeOnly? endTime = null;
+
+            if (!dto.IsFullDayOff)
+            {
+                if (string.IsNullOrWhiteSpace(dto.StartTime) ||
+                    string.IsNullOrWhiteSpace(dto.EndTime))
+                    throw new ArgumentException(
+                        "StartTime and EndTime are required for partial-day exceptions");
+
+                if (!TimeOnly.TryParse(dto.StartTime, out var parsedStart))
+                    throw new ArgumentException("Invalid StartTime format");
+
+                if (!TimeOnly.TryParse(dto.EndTime, out var parsedEnd))
+                    throw new ArgumentException("Invalid EndTime format");
+
+                if (parsedEnd <= parsedStart)
+                    throw new ArgumentException("EndTime must be after StartTime");
+
+                startTime = parsedStart;
+                endTime = parsedEnd;
+            }
+
+            // Upsert
+            var existing = await _unitOfWork.OrganizationAvailabilityExceptions
+                .GetByDateAsync(organizationId, date, cancellationToken);
+
+            OrganizationAvailabilityException entity;
+
+            if (existing != null)
+            {
+                existing.IsFullDayOff = dto.IsFullDayOff;
+                existing.StartTime = startTime;
+                existing.EndTime = endTime;
+                existing.Reason = dto.Reason;
+
+                await _unitOfWork.OrganizationAvailabilityExceptions
+                    .UpdateAsync(existing, cancellationToken);
+
+                entity = existing;
+            }
+            else
+            {
+                entity = new OrganizationAvailabilityException
+                {
+                    Id = Guid.NewGuid(),
+                    OrganizationId = organizationId,
+                    Date = DateOnly.FromDateTime(date.Date),
+                    IsFullDayOff = dto.IsFullDayOff,
+                    StartTime = startTime,
+                    EndTime = endTime,
+                    Reason = dto.Reason,
+                    CreatedAt = DateTime.UtcNow,
+                };
+
+                await _unitOfWork.OrganizationAvailabilityExceptions
+                    .AddAsync(entity, cancellationToken);
+            }
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            return new AvailabilityExceptionDto
+            {
+                Id = entity.Id,
+                Date = entity.Date.ToString("yyyy-MM-dd"),
+                IsFullDayOff = entity.IsFullDayOff,
+                StartTime = entity.StartTime?.ToString("HH:mm"),
+                EndTime = entity.EndTime?.ToString("HH:mm"),
+                Reason = entity.Reason,
+            };
+        }
+
+        public async Task DeleteExceptionAsync(
+            Guid organizationId,
+            Guid requestingUserId,
+            DateTime date,
+            CancellationToken cancellationToken = default)
+        {
+            var organization = await _unitOfWork.Organizations
+                .GetByIdAsync(organizationId, cancellationToken);
+            if (organization == null)
+                throw new KeyNotFoundException("Organization not found");
+
+            // Verify ownership
+            var user = await _unitOfWork.Organizations
+                .GetByUserIdAsync(requestingUserId, cancellationToken);
+            if (user == null || user.Id != organizationId)
+                throw new UnauthorizedAccessException(
+                    "You are not authorized to update this organization's availability");
+
+            var existing = await _unitOfWork.OrganizationAvailabilityExceptions
+                .GetByDateAsync(organizationId, date, cancellationToken);
+
+            if (existing == null)
+                throw new KeyNotFoundException(
+                    "No exception found for this date");
+
+            await _unitOfWork.OrganizationAvailabilityExceptions
+                .DeleteAsync(existing.Id, cancellationToken);
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
     }
 }

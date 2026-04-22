@@ -227,7 +227,7 @@ namespace Smart_Medc.Application.Services.Organization
                 throw new UnauthorizedAccessException("User not found");
 
             // Appointment Retreival 
-            var appointment = await _unitOfWork.Appointments.GetByIdAsync(appointmentId, cancellationToken);
+            var appointment = await _unitOfWork.Appointments.GetByIdWithDetailsAsync(appointmentId, cancellationToken);
             if (appointment == null)
                 throw new KeyNotFoundException("Appointment not found");
 
@@ -786,6 +786,33 @@ namespace Smart_Medc.Application.Services.Organization
                 ActionUrl = $"/appointments/{appointmentId}",
                 Data = $"{{\"appointmentId\":\"{appointmentId}\"}}"
             }, cancellationToken);
+        }
+
+        public async Task SaveNotesAsync(
+            Guid appointmentId,
+            Guid requestingUserId,
+            SaveNotesDto dto,
+            CancellationToken cancellationToken = default)
+        {
+            var appointment = await _unitOfWork.Appointments
+                .GetByIdAsync(appointmentId, cancellationToken);
+
+            if (appointment == null)
+                throw new KeyNotFoundException("Appointment not found");
+
+            // Only the organization that owns the appointment can save notes
+            var organization = await _unitOfWork.Organizations
+                .GetByUserIdAsync(requestingUserId, cancellationToken);
+
+            if (organization == null || organization.Id != appointment.OrganizationId)
+                throw new UnauthorizedAccessException(
+                    "You don't have permission to save notes for this appointment");
+
+            appointment.CompletionNotes = dto.Notes;
+            appointment.UpdatedAt = DateTime.UtcNow;
+
+            await _unitOfWork.Appointments.UpdateAsync(appointment, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
         // Helper method for unique appointment number generation

@@ -6,11 +6,11 @@
 ///  <summary>
 
 
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Smart_Medc.Application.DTOs.Auth;
 using Smart_Medc.Application.Interfaces.Services.Auth;
+using System.Security.Claims;
 
 namespace Smart_Medc.API.Controllers
 {

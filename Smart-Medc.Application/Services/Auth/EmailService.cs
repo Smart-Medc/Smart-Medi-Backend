@@ -1,9 +1,9 @@
-﻿using System.Net;
-using System.Net.Mail;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Smart_Medc.Application.Configuration;
 using Smart_Medc.Application.Interfaces.Auth;
+using System.Net;
+using System.Net.Mail;
 
 namespace Smart_Medc.Application.Services.Auth
 {

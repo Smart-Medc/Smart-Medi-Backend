@@ -1,9 +1,9 @@
-﻿using System.Security.Cryptography;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Smart_Medc.Application.Interfaces.Auth;
 using Smart_Medc.Domain.Entities.Identity;
 using Smart_Medc.Domain.Enums;
 using Smart_Medc.Domain.Interfaces.Repositories;
+using System.Security.Cryptography;
 
 namespace Smart_Medc.Application.Services.Auth
 {

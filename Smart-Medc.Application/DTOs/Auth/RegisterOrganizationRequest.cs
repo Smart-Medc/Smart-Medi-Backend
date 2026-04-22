@@ -1,6 +1,6 @@
-﻿using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Smart_Medc.Domain.Enums;
+using System.ComponentModel.DataAnnotations;
 
 namespace Smart_Medc.Application.DTOs.Auth
 {

@@ -24,5 +24,5 @@ namespace Smart_Medc.Domain.Entities.Notification
         public virtual Organization Organization { get; set; } = null!;
     }
 
-    
+
 }

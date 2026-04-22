@@ -1,5 +1,5 @@
-﻿using System.Security.Claims;
-using Smart_Medc.Domain.Entities.Identity;
+﻿using Smart_Medc.Domain.Entities.Identity;
+using System.Security.Claims;
 
 namespace Smart_Medc.Domain.Interfaces.Services.Auth
 {
