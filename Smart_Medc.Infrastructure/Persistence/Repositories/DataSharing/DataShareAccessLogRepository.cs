@@ -27,6 +27,10 @@ namespace Smart_Medc.Infrastructure.Persistence.Repositories.DataSharing
                 .Where(l => l.OrganizationId == organizationId)
                 .Include(l => l.DataShareCode)
                     .ThenInclude(d => d.Patient)
+                        // FIX: was missing this level — Patient.User was never
+                        // loaded so FullName always resolved to null, causing
+                        // the service to fall back to "Unknown Patient".
+                        .ThenInclude(p => p.User)
                 .OrderByDescending(l => l.AccessedAt)
                 .ToListAsync(cancellationToken);
         }

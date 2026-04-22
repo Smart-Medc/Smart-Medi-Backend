@@ -4,7 +4,6 @@ using Smart_Medc.Application.Interfaces.Notifications;
 using Smart_Medc.Domain.Enums;
 using Smart_Medc.Domain.Interfaces.Repositories;
 using System.Security.Claims;
-using System.Text.RegularExpressions;
 
 namespace Smart_Medc.API.Hubs
 {

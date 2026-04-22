@@ -2,10 +2,10 @@
 
 namespace Smart_Medc.Application.DTOs.Appointment
 {
-    public class RejectAppointmentDto 
+    public class RejectAppointmentDto
     {
         [Required]
         [MaxLength(500)]
-        public string Reason { get; set; } = string.Empty; 
+        public string Reason { get; set; } = string.Empty;
     }
 }

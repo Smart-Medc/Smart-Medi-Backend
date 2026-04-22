@@ -1,7 +1,7 @@
-﻿using System.Text;
-using OtpNet;
+﻿using OtpNet;
 using QRCoder;
 using Smart_Medc.Application.Interfaces.Auth;
+using System.Text;
 
 namespace Smart_Medc.Application.Services.Auth
 {

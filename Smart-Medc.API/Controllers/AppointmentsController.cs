@@ -484,5 +484,45 @@ namespace Smart_Medc.API.Controllers
                 return StatusCode(500, new { message = "An error occurred while marking no-show" });
             }
         }
+
+        /// <summary>
+        /// PATCH: api/appointments/{appointmentId}/notes
+        /// Save or update completion notes for an appointment (Organization only).
+        /// Notes can be saved at any point — not only when completing.
+        /// </summary>
+        [HttpPatch("{appointmentId}/notes")]
+        [Authorize(Roles = "Organization")]
+        public async Task<IActionResult> SaveNotes(
+            Guid appointmentId,
+            [FromBody] SaveNotesDto dto,
+            CancellationToken cancellationToken = default)
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrWhiteSpace(userIdClaim) ||
+                !Guid.TryParse(userIdClaim, out var requestingUserId))
+            {
+                return Unauthorized(new { message = "User ID not found in token" });
+            }
+
+            try
+            {
+                await _appointmentService.SaveNotesAsync(
+                    appointmentId, requestingUserId, dto, cancellationToken);
+                return NoContent();
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbid();
+            }
+            catch (Exception)
+            {
+                return StatusCode(500,
+                    new { message = "An error occurred while saving notes" });
+            }
+        }
     }
 }

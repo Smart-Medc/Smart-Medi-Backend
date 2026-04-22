@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Smart_Medc.Application.Common;
 using Smart_Medc.Application.DTOs.DataSharing;
 using Smart_Medc.Application.Interfaces;
@@ -156,6 +157,50 @@ namespace Smart_Medc.API.Controllers
             {
                 // Log the exception here
                 return StatusCode(500, new { message = "An error occurred while retrieving records" });
+            }
+        }
+
+        /// <summary>
+        /// GET: api/shared-data/access-history?pageNumber=1&pageSize=20
+        /// Returns the distinct share codes this organization has recently
+        /// accessed, ordered most-recent first. Requires Organization role.
+        /// </summary>
+        [HttpGet("access-history")]
+        [Authorize(Roles = "Organization")]
+        public async Task<ActionResult<PagedResult<AccessHistoryItemDto>>> GetAccessHistory(
+            [FromQuery] int pageNumber = 1,
+            [FromQuery] int pageSize = 20,
+            CancellationToken cancellationToken = default)
+        {
+            // The controller's only job: extract the user ID from the JWT
+            // and hand it straight to the service. Everything else —
+            // organization resolution, pagination, data fetching — lives
+            // in the service layer where it belongs.
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrWhiteSpace(userIdClaim) ||
+                !Guid.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized(new { message = "User ID not found in token" });
+            }
+
+            try
+            {
+                var result = await _service.GetOrganizationAccessHistoryAsync(
+                    userId,
+                    pageNumber,
+                    pageSize,
+                    cancellationToken);
+
+                return Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500,
+                    new { message = "An error occurred while retrieving access history" });
             }
         }
     }

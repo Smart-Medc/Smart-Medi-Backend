@@ -9,8 +9,6 @@ using Smart_Medc.Application.Interfaces.Services;
 using Smart_Medc.Application.Interfaces.Services.Auth;
 using Smart_Medc.Application.Interfaces.Storage;
 using Smart_Medc.Domain.Entities.Identity;
-using Smart_Medc.Domain.Entities.OrganizationModels;
-using Smart_Medc.Domain.Entities.PatientModels;
 using Smart_Medc.Domain.Enums;
 using Smart_Medc.Domain.Interfaces.Repositories;
 using Smart_Medc.Domain.Interfaces.Services.Auth;

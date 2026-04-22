@@ -28,5 +28,27 @@ namespace Smart_Medc.Infrastructure.Persistence.Repositories.Organizations
                                           (int)oh.DayOfWeek == dayOfWeek,
                                     cancellationToken);
         }
+
+        // ADDED
+        public async Task<OrganizationOperatingHours?> GetByOrganizationAndDayAsync(
+            Guid organizationId,
+            DayOfWeek dayOfWeek,
+            CancellationToken cancellationToken = default)
+        {
+            return await _context.Set<OrganizationOperatingHours>()
+                .FirstOrDefaultAsync(
+                    h => h.OrganizationId == organizationId &&
+                         h.DayOfWeek == dayOfWeek,
+                    cancellationToken);
+        }
+
+        // ADDED
+        public async Task UpdateAsync(
+            OrganizationOperatingHours hours,
+            CancellationToken cancellationToken = default)
+        {
+            _context.Set<OrganizationOperatingHours>().Update(hours);
+            await Task.CompletedTask; // SaveChanges is called by UnitOfWork
+        }
     }
 }
