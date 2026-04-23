@@ -1,4 +1,4 @@
-﻿    
+﻿
 namespace Smart_Medc.Application.Interfaces.Notifications
 {
     /// <summary>

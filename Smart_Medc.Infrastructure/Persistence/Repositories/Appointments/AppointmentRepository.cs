@@ -8,6 +8,21 @@ namespace Smart_Medc.Infrastructure.Persistence.Repositories.Appointments
     {
         public AppointmentRepository(ApplicationDbContext context) : base(context) { }
 
+        public async Task<Appointment?> GetByIdWithDetailsAsync(Guid id, CancellationToken cancellationToken = default)
+        {
+            return await _context.Appointments
+                .AsNoTracking()
+                .Where(a => a.Id == id)
+                .Include(a => a.Patient)
+                    .ThenInclude(p => p.User)
+                .Include(a => a.Organization)
+                .Include(a => a.Doctor)
+                .Include(a => a.DataShareCode)
+                .Include(a => a.Reminders.OrderBy(r => r.ScheduledFor))
+                .Include(a => a.StatusHistory.OrderByDescending(sh => sh.CreatedAt))
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
         public async Task<Appointment?> GetByAppointmentNumberAsync(
             string appointmentNumber,
             CancellationToken cancellationToken = default)

@@ -4,6 +4,7 @@ namespace Smart_Medc.Domain.Interfaces.Repositories.Appointments
 {
     public interface IAppointmentRepository : IRepository<Appointment>
     {
+        Task<Appointment?> GetByIdWithDetailsAsync(Guid id, CancellationToken cancellationToken = default);
         Task<Appointment?> GetByAppointmentNumberAsync(string appointmentNumber, CancellationToken cancellationToken = default);
         Task<IEnumerable<Appointment>> GetByPatientIdAsync(Guid patientId, CancellationToken cancellationToken = default);
         Task<IEnumerable<Appointment>> GetByOrganizationIdAsync(Guid organizationId, CancellationToken cancellationToken = default);

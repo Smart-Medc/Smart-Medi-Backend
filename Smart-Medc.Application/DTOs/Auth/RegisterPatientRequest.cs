@@ -1,5 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
-using Smart_Medc.Domain.Enums;
+﻿using Smart_Medc.Domain.Enums;
+using System.ComponentModel.DataAnnotations;
 
 namespace Smart_Medc.Application.DTOs.Auth
 {

@@ -1,8 +1,4 @@
-﻿using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Text;
-using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Smart_Medc.Application.Common.Constants;
@@ -10,6 +6,10 @@ using Smart_Medc.Application.Configuration;
 using Smart_Medc.Domain.Entities.Identity;
 using Smart_Medc.Domain.Interfaces.Repositories;
 using Smart_Medc.Domain.Interfaces.Services.Auth;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Smart_Medc.Infrastructure.Services.Auth
 {

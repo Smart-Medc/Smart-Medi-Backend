@@ -37,5 +37,12 @@ namespace Smart_Medc.Application.Interfaces
             int pageNumber = 1,
             int pageSize = 20,
             CancellationToken cancellationToken = default);
+
+        // NEW: returns the distinct codes this organization has accessed,
+        Task<PagedResult<AccessHistoryItemDto>> GetOrganizationAccessHistoryAsync(
+            Guid userId,
+            int pageNumber = 1,
+            int pageSize = 20,
+            CancellationToken cancellationToken = default);
     }
 }

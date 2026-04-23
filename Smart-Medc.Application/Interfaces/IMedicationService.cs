@@ -1,10 +1,5 @@
 ﻿using Smart_Medc.Application.Common;
 using Smart_Medc.Application.DTOs.Medications;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Smart_Medc.Application.Interfaces
 {

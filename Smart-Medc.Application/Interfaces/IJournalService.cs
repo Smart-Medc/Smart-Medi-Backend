@@ -1,11 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
-using Smart_Medc.Application.Common;
+﻿using Smart_Medc.Application.Common;
 using Smart_Medc.Application.DTOs.Journal;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Smart_Medc.Application.Interfaces
 {

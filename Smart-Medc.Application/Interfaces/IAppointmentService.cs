@@ -74,5 +74,13 @@ namespace Smart_Medc.Application.Interfaces
             Guid appointmentId,
             Guid requestingUserId,
             CancellationToken cancellationToken = default);
+
+        // ADDED: save notes independently of appointment status so the org
+        // can write notes at any point during or after the appointment.
+        Task SaveNotesAsync(
+            Guid appointmentId,
+            Guid requestingUserId,
+            SaveNotesDto dto,
+            CancellationToken cancellationToken = default);
     }
 }
