@@ -50,6 +50,9 @@ namespace Smart_Medc.Application.ServiceCollectionExtension
             // Register Admin Service
             services.AddScoped<IAdminService, AdminService>();
 
+            // Register PDF Export Service
+            services.AddScoped<IPdfExportService, PdfExportService>();
+
             // Register AutoMapper 
             services.AddAutoMapperConfig();
 
@@ -75,6 +78,8 @@ namespace Smart_Medc.Application.ServiceCollectionExtension
             services.AddScoped<IMedicalRecordService, MedicalRecordService>();
             services.AddScoped<IMedicationService, MedicationService>();
             services.AddScoped<IJournalService, JournalService>();
+            services.AddScoped<IPatientProfileService, PatientProfileService>();
+
             return services;
         }
 
@@ -106,6 +111,7 @@ namespace Smart_Medc.Application.ServiceCollectionExtension
         private static IServiceCollection AddNotificationServices(this IServiceCollection services)
         {
             services.AddScoped<INotificationService, NotificationService>();
+            services.AddScoped<INotificationPreferencesService, NotificationPreferencesService>();
             services.AddScoped<AppointmentReminderJob>();
             services.AddScoped<MedicationReminderJob>();
             services.AddScoped<AutoRejectAppointmentJob>();
