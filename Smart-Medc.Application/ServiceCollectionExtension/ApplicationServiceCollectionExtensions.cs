@@ -9,6 +9,7 @@ using Smart_Medc.Application.Interfaces.Services;
 using Smart_Medc.Application.Interfaces.Services.Auth;
 using Smart_Medc.Application.Interfaces.Storage;
 using Smart_Medc.Application.Services;
+using Smart_Medc.Application.Services.AI;
 using Smart_Medc.Application.Services.Auth;
 using Smart_Medc.Application.Services.DataSharing;
 using Smart_Medc.Application.Services.Notifications;
@@ -65,6 +66,9 @@ namespace Smart_Medc.Application.ServiceCollectionExtension
             // Register Data Sharing Services
             services.AddDataSharingServices();
 
+            // Register AI Chat Services
+            services.AddAIChatSerivces();
+
             // Register Notification Services
             services.AddNotificationServices();
 
@@ -100,6 +104,12 @@ namespace Smart_Medc.Application.ServiceCollectionExtension
         private static IServiceCollection AddDataSharingServices(this IServiceCollection services)
         {
             services.AddScoped<IDataSharingService, DataSharingService>();
+            return services;
+        }
+
+        private static IServiceCollection AddAIChatSerivces(this IServiceCollection services)
+        {
+            services.AddScoped<IAIChatService, AIChatService>();
             return services;
         }
 

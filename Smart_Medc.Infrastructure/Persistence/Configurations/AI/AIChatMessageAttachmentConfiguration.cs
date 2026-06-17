@@ -10,33 +10,24 @@ namespace Smart_Medc.Infrastructure.Persistence.Configurations.AI
         {
             builder.HasKey(a => a.Id);
 
-            builder.Property(a => a.FileName)
-                .IsRequired()
-                .HasMaxLength(255);
-
-            builder.Property(a => a.StoragePath)
-                .IsRequired()
-                .HasMaxLength(1000);
-
-            builder.Property(a => a.ContentType)
-                .IsRequired()
-                .HasMaxLength(100);
-
-            builder.Property(a => a.FileSizeBytes)
-                .IsRequired();
-
-            builder.Property(a => a.UploadedAt)
-                .IsRequired();
+            builder.Property(a => a.MessageId).IsRequired(false);
+            builder.Property(a => a.FileName).IsRequired().HasMaxLength(255);
+            builder.Property(a => a.StoragePath).IsRequired().HasMaxLength(1000);
+            builder.Property(a => a.ContentType).IsRequired().HasMaxLength(100);
+            builder.Property(a => a.FileSizeBytes).IsRequired();
+            builder.Property(a => a.UploadedAt).IsRequired();
 
             // Indexes
             builder.HasIndex(a => a.MessageId);
+            builder.HasIndex(a => a.StoragePath).IsUnique();
             builder.HasIndex(a => a.UploadedAt);
 
             // Relationships
             builder.HasOne(a => a.Message)
                 .WithMany(m => m.Attachments)
                 .HasForeignKey(a => a.MessageId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Cascade)
+                .IsRequired(false);
         }
     }
 }

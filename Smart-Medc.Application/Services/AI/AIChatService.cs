@@ -421,7 +421,7 @@ namespace Smart_Medc.Application.Services.AI
                     {
                         attachments.Add(new MedicalRecordAttachmentDto
                         {
-                            DocumentId = doc.Id.ToString(),
+                            DocumentId = doc.Id,
                             FileName = doc.OriginalFileName,
                             StoragePath = doc.StoragePath,
                             ContentType = doc.ContentType,

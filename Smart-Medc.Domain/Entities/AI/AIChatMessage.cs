@@ -16,7 +16,11 @@ namespace Smart_Medc.Domain.Entities.AI
         public string Content { get; set; } = string.Empty;
         public bool UsedMedicalRecords { get; set; }
         public DateTime CreatedAt { get; set; }
-        public int? TokensUsed { get; set; } // For tracking usage/costs
+        public int? TokensUsed { get; set; }
+
+        // Soft delete tracking
+        public bool IsDeleted { get; set; }
+        public DateTime? DeletedAt { get; set; }
 
         // Navigation properties
         public AIChatSession? Session { get; set; }
