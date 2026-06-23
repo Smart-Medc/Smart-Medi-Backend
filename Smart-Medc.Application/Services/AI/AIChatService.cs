@@ -11,6 +11,7 @@ using Smart_Medc.Domain.Entities.AI;
 using Smart_Medc.Domain.Interfaces.Repositories;
 using System.Text;
 using System.Text.Json;
+using System.Net.Http;
 
 namespace Smart_Medc.Application.Services.AI
 {
@@ -140,11 +141,20 @@ namespace Smart_Medc.Application.Services.AI
 
             try
             {
-                using var request = CreateMultipartRequest(prompt, imageStreams);
-                request.SetBrowserResponseStreamingEnabled(true);
+                using var multipartContent = CreateMultipartRequest(prompt, imageStreams);
 
-                using var response = await _aiClient.SendAsync(request,
-                    HttpCompletionOption.ResponseHeadersRead, ct);
+                // Create request message
+                using var request = new HttpRequestMessage(HttpMethod.Post, "/generate")
+                {
+                    Content = multipartContent
+                };
+
+                // Send with streaming (ResponseHeadersRead is enough)
+                using var response = await _aiClient.SendAsync(
+                    request,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    ct);
+
                 response.EnsureSuccessStatusCode();
 
                 using var responseStream = await response.Content.ReadAsStreamAsync(ct);
