@@ -9,6 +9,7 @@ namespace Smart_Medc.Application.DTOs.AI
     public class AIChatSessionDto
     {
         public Guid Id { get; set; }
+        public Guid PatientId { get; set; }
         public string? Title { get; set; }
         public bool UseMedicalRecordsContext { get; set; }
         public DateTime CreatedAt { get; set; }

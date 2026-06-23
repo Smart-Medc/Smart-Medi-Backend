@@ -10,7 +10,7 @@ namespace Smart_Medc.Infrastructure.Persistence.Configurations.AI
         {
             builder.HasKey(a => a.Id);
 
-            builder.Property(a => a.MessageId).IsRequired(false);
+            builder.Property(a => a.MessageId).IsRequired();
             builder.Property(a => a.FileName).IsRequired().HasMaxLength(255);
             builder.Property(a => a.StoragePath).IsRequired().HasMaxLength(1000);
             builder.Property(a => a.ContentType).IsRequired().HasMaxLength(100);

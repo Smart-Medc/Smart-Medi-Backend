@@ -12,8 +12,6 @@ namespace Smart_Medc.Application.DTOs.AI
         public string FileName { get; set; } = string.Empty;
         public string ContentType { get; set; } = string.Empty;
         public long FileSizeBytes { get; set; }
-        public DateTime UploadedAt { get; set; }
-        public string? PreviewUrl { get; set; } // Presigned R2 URL
+        public string? DownloadUrl { get; set; }
     }
-
 }

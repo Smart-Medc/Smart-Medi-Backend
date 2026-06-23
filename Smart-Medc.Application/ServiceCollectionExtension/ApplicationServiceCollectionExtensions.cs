@@ -66,8 +66,7 @@ namespace Smart_Medc.Application.ServiceCollectionExtension
             // Register Data Sharing Services
             services.AddDataSharingServices();
 
-            // Register AI Chat Services
-            services.AddAIChatSerivces();
+            services.AddAIChatServices(configuration);
 
             // Register Notification Services
             services.AddNotificationServices();
@@ -107,9 +106,14 @@ namespace Smart_Medc.Application.ServiceCollectionExtension
             return services;
         }
 
-        private static IServiceCollection AddAIChatSerivces(this IServiceCollection services)
+        private static IServiceCollection AddAIChatServices(this IServiceCollection services, IConfiguration configuration)
         {
-            services.AddScoped<IAIChatService, AIChatService>();
+            services.AddScoped<IAIChatService,AIChatService>();
+            services.AddHttpClient<IAIChatService, AIChatService>(client =>
+            {
+                client.BaseAddress = new Uri(configuration["AIService:BaseUrl"]!);
+                client.Timeout = TimeSpan.FromMinutes(5);
+            });
             return services;
         }
 
