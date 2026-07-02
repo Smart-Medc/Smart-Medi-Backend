@@ -1,7 +1,4 @@
-﻿// Smart_Medc.Application/Services/AI/AIChatService.cs
-
-using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Smart_Medc.Application.Common;
 using Smart_Medc.Application.DTOs.AI;
@@ -9,9 +6,9 @@ using Smart_Medc.Application.DTOs.MedicalRecord;
 using Smart_Medc.Application.Interfaces;
 using Smart_Medc.Domain.Entities.AI;
 using Smart_Medc.Domain.Interfaces.Repositories;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using System.Net.Http;
 
 namespace Smart_Medc.Application.Services.AI
 {
@@ -25,7 +22,8 @@ namespace Smart_Medc.Application.Services.AI
         private readonly IChatHubDispatcher _hubDispatcher;
 
         private const string AiChatContainer = "ai-chat-attachments";
-        private const int MaxContextMessages = 10;  // previous messages to include in prompt
+        private const int MaxContextMessages = 6;
+        private static readonly TimeSpan AiTimeout = TimeSpan.FromMinutes(4);
 
         public AIChatService(
             IUnitOfWork unitOfWork,
@@ -56,145 +54,228 @@ namespace Smart_Medc.Application.Services.AI
                 PatientId = patientId,
                 Title = dto.Title,
                 UseMedicalRecordsContext = dto.UseMedicalRecordsContext,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                LastMessageAt = null
             };
 
             await _unitOfWork.AIChatSessions.AddAsync(session, ct);
             await _unitOfWork.SaveChangesAsync(ct);
 
-            return ServiceResult<AIChatSessionDto>.Success(MapToSessionDto(session));
+            return ServiceResult<AIChatSessionDto>.Success(MapToSessionDto(session, 0));
         }
 
         public async Task<ServiceResult<AIChatMessageDto>> SendMessageAsync(
-            Guid sessionId, string content, List<IFormFile>? files,
-            string? connectionId, CancellationToken ct)
+            Guid sessionId,
+            string content,
+            List<IFormFile>? files,
+            string? connectionId,
+            CancellationToken ct)
         {
-            // 1. Validate session
-            var session = await _unitOfWork.AIChatSessions
-                .GetByIdWithMessagesAsync(sessionId, ct);
+            if (string.IsNullOrWhiteSpace(content) && (files == null || files.Count == 0))
+                return ServiceResult<AIChatMessageDto>.Failure("Message content or file is required.", 400);
+
+            var session = await _unitOfWork.AIChatSessions.GetByIdWithMessagesAsync(sessionId, ct);
             if (session == null || session.IsDeleted)
                 return ServiceResult<AIChatMessageDto>.NotFound("Session not found");
 
-            // 2. Store user message
             var userMessage = new AIChatMessage
             {
                 Id = Guid.NewGuid(),
                 SessionId = sessionId,
                 Role = MessageRole.User,
-                Content = content,
+                Content = content ?? string.Empty,
                 CreatedAt = DateTime.UtcNow
             };
-            await _unitOfWork.AIChatMessages.AddAsync(userMessage, ct);
 
-            // 3. Upload attachments (files) and create DB records
+            var aiStreams = new List<MemoryStream>();
             var attachmentEntities = new List<AIChatMessageAttachment>();
-            if (files != null)
-            {
-                foreach (var file in files)
-                {
-                    if (file.Length == 0) continue;
-
-                    using var stream = file.OpenReadStream();
-                    var uploadResult = await _fileStorage.UploadFileAsync(
-                        stream, file.FileName, file.ContentType, AiChatContainer, ct);
-
-                    var attachment = new AIChatMessageAttachment
-                    {
-                        Id = Guid.NewGuid(),
-                        MessageId = userMessage.Id,
-                        FileName = file.FileName,
-                        StoragePath = uploadResult.StoragePath,
-                        ContentType = file.ContentType,
-                        FileSizeBytes = uploadResult.FileSizeBytes,
-                        UploadedAt = DateTime.UtcNow
-                    };
-                    attachmentEntities.Add(attachment);
-                }
-                if (attachmentEntities.Any())
-                {
-                    await _unitOfWork.AIChatMessageAttachments.AddRangeAsync(attachmentEntities, ct);
-                    // Link attachments to user message (EF will handle on save)
-                    // We need to attach them to the userMessage object for immediate use
-                    // The navigation property will be set when the message is saved; we can also assign them directly
-                    // Since the userMessage isn't saved yet, we manually add them to the list:
-                    userMessage.Attachments = attachmentEntities;
-                }
-            }
-
-            // Save user message + attachments (so they get IDs)
-            await _unitOfWork.SaveChangesAsync(ct);
-
-            // 4. Build prompt with medical records context if enabled
-            string prompt = await BuildPromptAsync(session, content, ct);
-
-            // 5. Prepare images for the AI call (from the newly uploaded files)
-            var imageStreams = new List<(Stream Stream, string FileName, string ContentType)>();
-            foreach (var att in attachmentEntities)
-            {
-                var stream = await _fileStorage.DownloadFileAsync(AiChatContainer, att.StoragePath, ct);
-                imageStreams.Add((stream, att.FileName, att.ContentType));
-            }
-
-            // 6. Call Python inference service with streaming
             var assistantContent = new StringBuilder();
-            int? tokensUsed = null;
+            var streamedAnyToken = false;
+
+            MultipartFormDataContent? multipartContent = null;
 
             try
             {
-                using var multipartContent = CreateMultipartRequest(prompt, imageStreams);
+                await _unitOfWork.AIChatMessages.AddAsync(userMessage, ct);
 
-                // Create request message
+                multipartContent = new MultipartFormDataContent();
+
+                if (files != null)
+                {
+                    foreach (var file in files.Where(f => f.Length > 0))
+                    {
+                        byte[] bytes;
+                        await using (var sourceMs = new MemoryStream())
+                        {
+                            await file.CopyToAsync(sourceMs, ct);
+                            bytes = sourceMs.ToArray();
+                        }
+
+                        await using (var uploadStream = new MemoryStream(bytes, writable: false))
+                        {
+                            var uploadResult = await _fileStorage.UploadFileAsync(
+                                uploadStream,
+                                file.FileName,
+                                file.ContentType,
+                                AiChatContainer,
+                                ct);
+
+                            attachmentEntities.Add(new AIChatMessageAttachment
+                            {
+                                Id = Guid.NewGuid(),
+                                MessageId = userMessage.Id,
+                                FileName = file.FileName,
+                                StoragePath = uploadResult.StoragePath,
+                                ContentType = file.ContentType,
+                                FileSizeBytes = uploadResult.FileSizeBytes,
+                                UploadedAt = DateTime.UtcNow
+                            });
+                        }
+
+                        var aiStream = new MemoryStream(bytes, writable: false);
+                        aiStreams.Add(aiStream);
+
+                        var streamContent = new StreamContent(aiStream);
+                        streamContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
+                        multipartContent.Add(streamContent, "images", file.FileName);
+                    }
+                }
+
+                if (attachmentEntities.Any())
+                {
+                    await _unitOfWork.AIChatMessageAttachments.AddRangeAsync(attachmentEntities, ct);
+                    userMessage.Attachments = attachmentEntities;
+                }
+
+                session.LastMessageAt = DateTime.UtcNow;
+                await _unitOfWork.SaveChangesAsync(ct);
+
+                var messages = await BuildMessagesListAsync(session, content, userMessage.Id, ct);
+                multipartContent.Add(
+                    new StringContent(JsonSerializer.Serialize(messages), Encoding.UTF8, "text/plain"),
+                    "messages"
+                );
+
                 using var request = new HttpRequestMessage(HttpMethod.Post, "/generate")
                 {
                     Content = multipartContent
                 };
 
-                // Send with streaming (ResponseHeadersRead is enough)
+                using var aiCts = new CancellationTokenSource(AiTimeout);
+
                 using var response = await _aiClient.SendAsync(
                     request,
                     HttpCompletionOption.ResponseHeadersRead,
-                    ct);
+                    aiCts.Token);
 
-                response.EnsureSuccessStatusCode();
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errBody = await response.Content.ReadAsStringAsync(aiCts.Token);
+                    _logger.LogError("AI service error {StatusCode}: {Body}", (int)response.StatusCode, errBody);
+                    throw new InvalidOperationException($"AI service returned {(int)response.StatusCode}: {errBody}");
+                }
 
-                using var responseStream = await response.Content.ReadAsStreamAsync(ct);
-                using var reader = new StreamReader(responseStream);
+                using var stream = await response.Content.ReadAsStreamAsync(aiCts.Token);
+                using var reader = new StreamReader(stream);
 
                 while (!reader.EndOfStream)
                 {
-                    var line = await reader.ReadLineAsync(ct);
+                    var line = await reader.ReadLineAsync(aiCts.Token);
                     if (string.IsNullOrWhiteSpace(line)) continue;
 
-                    // Each line is a JSON object: {"token": "Hello"}
                     try
                     {
                         using var doc = JsonDocument.Parse(line);
-                        if (doc.RootElement.TryGetProperty("token", out var tokenProperty))
-                        {
-                            string token = tokenProperty.GetString() ?? "";
-                            assistantContent.Append(token);
 
-                            // Push token to SignalR
-                            if (!string.IsNullOrEmpty(connectionId))
-                                await _hubDispatcher.SendTokenAsync(connectionId, token, ct);
+                        if (doc.RootElement.TryGetProperty("error", out var errProp))
+                        {
+                            var errorText = errProp.GetString() ?? "Unknown AI stream error";
+                            throw new InvalidOperationException($"AI stream error: {errorText}");
                         }
-                        // Optionally capture tokensUsed if returned
+
+                        if (doc.RootElement.TryGetProperty("token", out var tokenProp))
+                        {
+                            var token = tokenProp.GetString() ?? string.Empty;
+                            if (!string.IsNullOrEmpty(token))
+                            {
+                                assistantContent.Append(token);
+                                streamedAnyToken = true;
+
+                                if (!string.IsNullOrEmpty(connectionId))
+                                {
+                                    try
+                                    {
+                                        // immediate per-token dispatch to frontend
+                                        await _hubDispatcher.SendTokenAsync(connectionId, token, CancellationToken.None);
+                                    }
+                                    catch (Exception hubEx)
+                                    {
+                                        _logger.LogWarning(hubEx, "Hub token send failed for session {SessionId}", sessionId);
+                                    }
+                                }
+                            }
+                        }
+
+                        if (doc.RootElement.TryGetProperty("done", out var doneProp) &&
+                            doneProp.ValueKind == JsonValueKind.True)
+                        {
+                            break;
+                        }
                     }
                     catch (JsonException)
                     {
-                        _logger.LogWarning("Invalid JSON from AI service: {Line}", line);
+                        _logger.LogWarning("Skipping non-JSON AI stream line for session {SessionId}: {Line}", sessionId, line);
                     }
                 }
             }
+            catch (OperationCanceledException ex)
+            {
+                _logger.LogWarning(ex, "AI request timed out/canceled for session {SessionId}", sessionId);
+
+                if (!streamedAnyToken)
+                {
+                    await SafeRollbackUserMessageAsync(userMessage);
+                    if (!string.IsNullOrEmpty(connectionId))
+                        await SafeHubErrorAsync(connectionId, "AI request timed out. Please try again.");
+                }
+
+                return ServiceResult<AIChatMessageDto>.Failure("AI request timed out.", 504);
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "AI inference failed for session {SessionId}", sessionId);
-                if (!string.IsNullOrEmpty(connectionId))
-                    await _hubDispatcher.SendErrorAsync(connectionId, "AI service unavailable. Please try again later.", ct);
-                return ServiceResult<AIChatMessageDto>.Failure("AI service error", 502);
+                _logger.LogError(ex, "AI pipeline runtime failure for session {SessionId}", sessionId);
+
+                if (!streamedAnyToken)
+                {
+                    await SafeRollbackUserMessageAsync(userMessage);
+                    if (!string.IsNullOrEmpty(connectionId))
+                        await SafeHubErrorAsync(connectionId, "Medical AI engine is currently unavailable.");
+                }
+
+                return ServiceResult<AIChatMessageDto>.Failure($"AI Service Engine Interrupted: {ex.Message}", 502);
+            }
+            finally
+            {
+                multipartContent?.Dispose();
+
+                foreach (var s in aiStreams)
+                    await s.DisposeAsync();
             }
 
-            // 7. Save assistant message
+            if (assistantContent.Length == 0)
+            {
+                assistantContent.Append("I'm sorry, I couldn't generate a response. Please try again.");
+
+                if (!string.IsNullOrEmpty(connectionId))
+                {
+                    try
+                    {
+                        await _hubDispatcher.SendTokenAsync(connectionId, assistantContent.ToString(), CancellationToken.None);
+                    }
+                    catch { }
+                }
+            }
+
             var assistantMessage = new AIChatMessage
             {
                 Id = Guid.NewGuid(),
@@ -202,18 +283,34 @@ namespace Smart_Medc.Application.Services.AI
                 Role = MessageRole.Assistant,
                 Content = assistantContent.ToString(),
                 UsedMedicalRecords = session.UseMedicalRecordsContext,
-                TokensUsed = tokensUsed,
                 CreatedAt = DateTime.UtcNow
             };
-            await _unitOfWork.AIChatMessages.AddAsync(assistantMessage, ct);
 
-            // Update session timestamp
-            session.LastMessageAt = DateTime.UtcNow;
-            await _unitOfWork.SaveChangesAsync(ct);
+            try
+            {
+                await _unitOfWork.AIChatMessages.AddAsync(assistantMessage, ct);
+                session.LastMessageAt = DateTime.UtcNow;
+                await _unitOfWork.SaveChangesAsync(ct);
+            }
+            catch (OperationCanceledException)
+            {
+                using var saveCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await _unitOfWork.AIChatMessages.AddAsync(assistantMessage, saveCts.Token);
+                session.LastMessageAt = DateTime.UtcNow;
+                await _unitOfWork.SaveChangesAsync(saveCts.Token);
+            }
 
-            // Signal completion
             if (!string.IsNullOrEmpty(connectionId))
-                await _hubDispatcher.SendCompletionAsync(connectionId, assistantMessage.Id, ct);
+            {
+                try
+                {
+                    await _hubDispatcher.SendCompletionAsync(connectionId, assistantMessage.Id, CancellationToken.None);
+                }
+                catch (Exception hubEx)
+                {
+                    _logger.LogWarning(hubEx, "Hub completion send failed for session {SessionId}", sessionId);
+                }
+            }
 
             return ServiceResult<AIChatMessageDto>.Success(MapToMessageDto(assistantMessage));
         }
@@ -221,8 +318,7 @@ namespace Smart_Medc.Application.Services.AI
         public async Task<ServiceResult<List<AIChatMessageDto>>> GetSessionMessagesAsync(
             Guid sessionId, CancellationToken ct)
         {
-            var session = await _unitOfWork.AIChatSessions
-                .GetByIdWithMessagesAsync(sessionId, ct);
+            var session = await _unitOfWork.AIChatSessions.GetByIdWithMessagesAsync(sessionId, ct);
             if (session == null || session.IsDeleted)
                 return ServiceResult<List<AIChatMessageDto>>.NotFound("Session not found");
 
@@ -238,97 +334,134 @@ namespace Smart_Medc.Application.Services.AI
         public async Task<ServiceResult<List<AIChatSessionDto>>> GetPatientSessionsAsync(
             Guid patientId, CancellationToken ct)
         {
-            var sessions = await _unitOfWork.AIChatSessions
-                .GetByPatientIdAsync(patientId, false, ct);
+            var sessions = await _unitOfWork.AIChatSessions.GetByPatientIdAsync(patientId, false, ct);
 
-            var dtos = sessions.Select(s => new AIChatSessionDto
+            var dtos = new List<AIChatSessionDto>(sessions.Count);
+            foreach (var s in sessions)
             {
-                Id = s.Id,
-                PatientId = s.PatientId,
-                Title = s.Title,
-                UseMedicalRecordsContext = s.UseMedicalRecordsContext,
-                CreatedAt = s.CreatedAt,
-                LastMessageAt = s.LastMessageAt,
-                MessageCount = s.Messages?.Count(m => !m.IsDeleted) ?? 0
-            }).ToList();
+                var messageCount = await _unitOfWork.AIChatMessages.CountAsync(
+                    m => m.SessionId == s.Id && !m.IsDeleted, ct);
+
+                // keep empty sessions hidden from history, but do not delete here
+                if (messageCount == 0) continue;
+
+                dtos.Add(MapToSessionDto(s, messageCount));
+            }
 
             return ServiceResult<List<AIChatSessionDto>>.Success(dtos);
         }
 
-        // --- Private helpers ---
-        private async Task<string> BuildPromptAsync(AIChatSession session, string userText, CancellationToken ct)
+        public async Task<ServiceResult<bool>> DeleteSessionAsync(Guid sessionId, CancellationToken ct)
         {
-            var sb = new StringBuilder();
-            sb.AppendLine("You are MedGemma, a helpful medical AI assistant that can analyze medical images and lab reports.");
-            sb.AppendLine("Provide clear, accurate explanations in simple language.");
-            sb.AppendLine();
+            var session = await _unitOfWork.AIChatSessions.GetByIdWithMessagesAsync(sessionId, ct);
+            if (session == null || session.IsDeleted)
+                return ServiceResult<bool>.NotFound("Session not found");
 
-            // Add medical record context if enabled
+            session.IsDeleted = true;
+            session.DeletedAt = DateTime.UtcNow;
+
+            if (session.Messages != null)
+            {
+                foreach (var msg in session.Messages.Where(m => !m.IsDeleted))
+                {
+                    msg.IsDeleted = true;
+                    msg.DeletedAt = DateTime.UtcNow;
+                }
+            }
+
+            await _unitOfWork.SaveChangesAsync(ct);
+            return ServiceResult<bool>.Success(true);
+        }
+
+        private async Task SafeRollbackUserMessageAsync(AIChatMessage userMessage)
+        {
+            try
+            {
+                await _unitOfWork.AIChatMessages.DeleteAsync(userMessage);
+                await _unitOfWork.SaveChangesAsync(CancellationToken.None);
+            }
+            catch (Exception dbEx)
+            {
+                _logger.LogError(dbEx, "Failed rolling back user message {MessageId}", userMessage.Id);
+            }
+        }
+
+        private async Task SafeHubErrorAsync(string connectionId, string message)
+        {
+            try
+            {
+                await _hubDispatcher.SendErrorAsync(connectionId, message, CancellationToken.None);
+            }
+            catch { }
+        }
+
+        private async Task<List<Dictionary<string, string>>> BuildMessagesListAsync(
+            AIChatSession session, string userText, Guid? excludeMessageId, CancellationToken ct)
+        {
+            var messages = new List<Dictionary<string, string>>
+            {
+                new()
+                {
+                    { "role", "system" },
+                    {
+                        "content",
+                        "You are MedGemma, a helpful medical AI assistant that can analyze medical images and lab reports. Provide clear, accurate explanations in simple language."
+                    }
+                }
+            };
+
             if (session.UseMedicalRecordsContext)
             {
                 var statsResult = await _medicalRecordService.GetStatisticsAsync(session.PatientId, ct);
                 if (statsResult.IsSuccess)
                 {
-                    var stats = statsResult.Data!;
-                    sb.AppendLine($"Patient has {stats.TotalRecords} medical records:");
-                    sb.AppendLine($"- Lab reports: {stats.LabReports}");
-                    sb.AppendLine($"- Imaging: {stats.Imaging}");
-                    sb.AppendLine($"- Consultations: {stats.ConsultationNotes}");
-                    sb.AppendLine();
+                    var sb = new StringBuilder();
+                    sb.AppendLine("Here is a summary of the patient's medical records:");
+                    sb.AppendLine($"Total records: {statsResult.Data!.TotalRecords}");
+                    sb.AppendLine($"Lab reports: {statsResult.Data.LabReports}, Imaging: {statsResult.Data.Imaging}, Consultations: {statsResult.Data.ConsultationNotes}");
 
-                    // Fetch details of 5 most recent records
                     var recordsResult = await _medicalRecordService.GetPatientRecordsAsync(
-                        session.PatientId, new MedicalRecordQueryDto { PageSize = 5, SortDescending = true }, ct);
+                        session.PatientId,
+                        new MedicalRecordQueryDto { PageSize = 3, SortDescending = true },
+                        ct);
+
                     if (recordsResult.IsSuccess)
                     {
-                        sb.AppendLine("Recent records:");
                         foreach (var rec in recordsResult.Data!.Items)
-                        {
-                            sb.AppendLine($"- {rec.Title} (Type: {rec.RecordTypeName}): {rec.FindingsSummary ?? "No summary"}");
-                        }
+                            sb.AppendLine($"- {rec.Title}: {rec.FindingsSummary ?? "No summary"}");
                     }
+
+                    messages.Add(new Dictionary<string, string>
+                    {
+                        { "role", "system" },
+                        { "content", sb.ToString() }
+                    });
                 }
-                sb.AppendLine();
             }
 
-            // Include recent chat history (last N messages)
-            var recentMessages = await _unitOfWork.AIChatMessages
-                .GetBySessionIdAsync(session.Id, false, ct);
-            var contextMessages = recentMessages
-                .Where(m => !m.IsDeleted)
-                .TakeLast(MaxContextMessages)
-                .ToList();
-
-            foreach (var msg in contextMessages)
+            var recentMessages = await _unitOfWork.AIChatMessages.GetBySessionIdAsync(session.Id, false, ct);
+            foreach (var msg in recentMessages.TakeLast(MaxContextMessages))
             {
-                string role = msg.Role == MessageRole.User ? "User" : "Assistant";
-                sb.AppendLine($"{role}: {msg.Content}");
+                if (excludeMessageId.HasValue && msg.Id == excludeMessageId.Value) continue;
+
+                var role = msg.Role == MessageRole.User ? "user" : "assistant";
+                messages.Add(new Dictionary<string, string>
+                {
+                    { "role", role },
+                    { "content", msg.Content }
+                });
             }
 
-            // Add user's current message
-            sb.AppendLine($"User: {userText}");
-            sb.AppendLine("Assistant: ");
+            messages.Add(new Dictionary<string, string>
+            {
+                { "role", "user" },
+                { "content", userText }
+            });
 
-            return sb.ToString();
+            return messages;
         }
 
-        private static MultipartFormDataContent CreateMultipartRequest(
-            string prompt, List<(Stream Stream, string FileName, string ContentType)> images)
-        {
-            var form = new MultipartFormDataContent();
-            form.Add(new StringContent(prompt), "prompt");
-
-            foreach (var (stream, fileName, contentType) in images)
-            {
-                var streamContent = new StreamContent(stream);
-                streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
-                form.Add(streamContent, "images", fileName);
-            }
-
-            return form;
-        }
-
-        private static AIChatSessionDto MapToSessionDto(AIChatSession session) => new()
+        private static AIChatSessionDto MapToSessionDto(AIChatSession session, int messageCount) => new()
         {
             Id = session.Id,
             PatientId = session.PatientId,
@@ -336,7 +469,7 @@ namespace Smart_Medc.Application.Services.AI
             UseMedicalRecordsContext = session.UseMedicalRecordsContext,
             CreatedAt = session.CreatedAt,
             LastMessageAt = session.LastMessageAt,
-            MessageCount = session.Messages?.Count(m => !m.IsDeleted) ?? 0
+            MessageCount = messageCount
         };
 
         private static AIChatMessageDto MapToMessageDto(AIChatMessage message) => new()

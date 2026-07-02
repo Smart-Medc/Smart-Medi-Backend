@@ -108,7 +108,6 @@ namespace Smart_Medc.Application.ServiceCollectionExtension
 
         private static IServiceCollection AddAIChatServices(this IServiceCollection services, IConfiguration configuration)
         {
-            services.AddScoped<IAIChatService,AIChatService>();
             services.AddHttpClient<IAIChatService, AIChatService>(client =>
             {
                 client.BaseAddress = new Uri(configuration["AIService:BaseUrl"]!);
