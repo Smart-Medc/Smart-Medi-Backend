@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Hangfire;
 using HealthChecks.UI.Client;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -13,7 +14,6 @@ using Smart_Medc.Application.ServiceCollectionExtension;
 using Smart_Medc.Infrastructure.Persistence;
 using Smart_Medc.Infrastructure.Persistence.Seeders;
 using Smart_Medc.Infrastructure.ServiceCollectionExtension;
-using System.Text.Json.Serialization;
 
 namespace Smart_Medc.API
 {
@@ -98,7 +98,8 @@ namespace Smart_Medc.API
                             "http://localhost:5379",
                             "https://localhost:7278",
                             "https://localhost:7039",
-                            "https://admin-dashboard-sigma-one-74.vercel.app" // for production admin dashboard
+                            "https://admin-dashboard-sigma-one-74.vercel.app", // for production admin dashboard
+                            "https://smart-medi-frontend-zeta.vercel.app" // for production frontend
                           )
                           .AllowAnyMethod()
                           .AllowAnyHeader()
