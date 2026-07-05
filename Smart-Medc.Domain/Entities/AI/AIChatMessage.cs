@@ -2,20 +2,29 @@
 
 namespace Smart_Medc.Domain.Entities.AI
 {
+    public enum MessageRole
+    {
+        User = 0,
+        Assistant = 1
+    }
+
     public class AIChatMessage
     {
         public Guid Id { get; set; }
         public Guid SessionId { get; set; }
-
-        public ChatRole Role { get; set; }
+        public MessageRole Role { get; set; }
         public string Content { get; set; } = string.Empty;
-        public bool UsedMedicalRecords { get; set; } = false;
+        public bool UsedMedicalRecords { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public int? TokensUsed { get; set; }
 
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        // Soft delete tracking
+        public bool IsDeleted { get; set; }
+        public DateTime? DeletedAt { get; set; }
 
-        // Navigation
-        public virtual AIChatSession Session { get; set; } = null!;
-        public virtual ICollection<AIChatMessageAttachment> Attachments { get; set; } = new List<AIChatMessageAttachment>();
+        // Navigation properties
+        public AIChatSession? Session { get; set; }
+        public ICollection<AIChatMessageAttachment> Attachments { get; set; } = new List<AIChatMessageAttachment>();
     }
 
 

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Smart_Medc.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using Smart_Medc.Infrastructure.Persistence;
 namespace Smart_Medc.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260617180127_AI-Modification")]
+    partial class AIModification
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -257,18 +260,6 @@ namespace Smart_Medc.Infrastructure.Migrations
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("datetime2");
-
-                    b.Property<bool>("IncludeCurrentMedications")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IncludeJournalEntries")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IncludeMedicalRecords")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IncludePastMedications")
-                        .HasColumnType("bit");
 
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()

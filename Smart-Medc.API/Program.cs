@@ -23,29 +23,31 @@ namespace Smart_Medc.API
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // Add services to the container
+            // Add services
             builder.Services.AddControllers(option => option.Filters.Add<GlobalValidationFilter>())
                 .AddJsonOptions(options =>
                 {
                     options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
                 });
 
-            // Register Infrastructure Services (DbContext, Identity, Repositories)
+            // Infrastructure
             builder.Services.AddInfrastructureServices(builder.Configuration);
 
-            // Register Application Services (Business Logic Services)
+            // Application Services
             builder.Services.AddApplicationServices(builder.Configuration);
 
-            // Register Api Services
+            // API Services
             builder.Services.AddApiServices(builder.Configuration);
 
-            // Disable automatic validation for asp.net core and enabled GlobalValidationFilter instead
+
+
+            // Disable auto validation
             builder.Services.Configure<ApiBehaviorOptions>(options =>
             {
                 options.SuppressModelStateInvalidFilter = true;
             });
 
-            // Configure OpenAPI/Swagger
+            // Swagger
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(options =>
             {
@@ -53,15 +55,14 @@ namespace Smart_Medc.API
                 {
                     Title = "Smart Medi API",
                     Version = "v1",
-                    Description = "Comprehensive medical management system API",
+                    Description = "Comprehensive medical management system API with AI chat",
                     Contact = new OpenApiContact
                     {
                         Name = "Smart Medi Team",
-                        Email = "amaryasser.dev@gmail.com"
+                        Email = "support@smartmedi.com"
                     }
                 });
 
-                // Add JWT Authentication to Swagger
                 options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
                 {
                     Name = "Authorization",
@@ -69,8 +70,9 @@ namespace Smart_Medc.API
                     Scheme = "Bearer",
                     BearerFormat = "JWT",
                     In = ParameterLocation.Header,
-                    Description = "Enter 'Bearer' [space] and then your valid token.\n\nExample: \"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\""
+                    Description = "Enter your JWT token"
                 });
+
                 options.AddSecurityRequirement(new OpenApiSecurityRequirement
                 {
                     {
@@ -87,7 +89,7 @@ namespace Smart_Medc.API
                 });
             });
 
-            // Add CORS policy (configure as needed)
+            // CORS
             builder.Services.AddCors(options =>
             {
                 options.AddPolicy("AllowAll", policy =>
@@ -99,7 +101,8 @@ namespace Smart_Medc.API
                             "https://localhost:7278",
                             "https://localhost:7039",
                             "https://admin-dashboard-sigma-one-74.vercel.app", // for production admin dashboard
-                            "https://smart-medi-frontend-zeta.vercel.app" // for production frontend
+                            "https://smart-medi-frontend-zeta.vercel.app", // for production frontend
+                            "https://localhost:8000"
                           )
                           .AllowAnyMethod()
                           .AllowAnyHeader()
@@ -107,10 +110,9 @@ namespace Smart_Medc.API
                 });
             });
 
-
             var app = builder.Build();
 
-            // Apply pending migrations (recreates tables if missing, safe to run every startup)
+            // Migrations
             using (var scope = app.Services.CreateScope())
             {
                 var services = scope.ServiceProvider;
@@ -128,26 +130,24 @@ namespace Smart_Medc.API
                     throw;
                 }
 
-                // Seed roles after tables exist
+                // Seed roles
                 var roleManager = services.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
                 var roleLogger = services.GetRequiredService<ILogger<Program>>();
                 await RoleSeeder.SeedRolesAsync(roleManager, roleLogger);
             }
 
-            // Configure the HTTP request pipeline
+            // Middleware
             if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
             {
                 app.UseSwagger();
                 app.UseSwaggerUI(c =>
                 {
                     c.SwaggerEndpoint("/swagger/v1/swagger.json", "Smart Medi API v1");
-                    c.RoutePrefix = string.Empty; // Set Swagger UI, but fucking not work. Fix it later.
                 });
                 app.UseDeveloperExceptionPage();
-                app.UseSwagger();
-                app.UseSwaggerUI();
             }
 
+            // Static files
             var uploadsPath = Path.Combine(builder.Environment.ContentRootPath, "uploads");
             if (!Directory.Exists(uploadsPath))
             {
@@ -157,8 +157,7 @@ namespace Smart_Medc.API
             app.UseStaticFiles();
             app.UseStaticFiles(new StaticFileOptions
             {
-                FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(
-                    Path.Combine(builder.Environment.ContentRootPath, "uploads")),
+                FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsPath),
                 RequestPath = "/uploads",
                 OnPrepareResponse = ctx =>
                 {
@@ -168,12 +167,11 @@ namespace Smart_Medc.API
             });
 
             app.UseHttpsRedirection();
-
             app.UseCors("AllowAll");
-
             app.UseAuthentication();
             app.UseAuthorization();
 
+            // Health checks
             app.MapHealthChecks("/health", new HealthCheckOptions
             {
                 ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
@@ -181,15 +179,17 @@ namespace Smart_Medc.API
 
             app.MapControllers();
 
-            // Register Notification Module dendencies and SignalR hub
-
+            // SignalR Hubs
             app.MapHub<NotificationHub>("/hubs/notifications");
+            app.MapHub<ChatHub>("/hubs/chat");
 
+            // Hangfire Dashboard
             if (app.Environment.IsDevelopment())
             {
                 app.UseHangfireDashboard("/hangfire");
             }
 
+            // Recurring jobs
             using (var scope = app.Services.CreateScope())
             {
                 var recurringJobs = scope.ServiceProvider

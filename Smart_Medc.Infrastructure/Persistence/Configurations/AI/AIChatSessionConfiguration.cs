@@ -8,34 +8,30 @@ namespace Smart_Medc.Infrastructure.Persistence.Configurations.AI
     {
         public void Configure(EntityTypeBuilder<AIChatSession> builder)
         {
-            builder.HasKey(acs => acs.Id);
+            builder.HasKey(s => s.Id);
 
-            builder.Property(acs => acs.Title)
-                .HasMaxLength(200);
-
-            builder.Property(acs => acs.UseMedicalRecordsContext)
-                .IsRequired()
-                .HasDefaultValue(false);
-
-            builder.Property(acs => acs.CreatedAt)
-                .IsRequired();
-
-            builder.Property(acs => acs.LastMessageAt)
-                .IsRequired(false);
+            builder.Property(s => s.PatientId).IsRequired();
+            builder.Property(s => s.Title).HasMaxLength(200);
+            builder.Property(s => s.UseMedicalRecordsContext).IsRequired().HasDefaultValue(false);
+            builder.Property(s => s.CreatedAt).IsRequired();
+            builder.Property(s => s.LastMessageAt).IsRequired(false);
+            builder.Property(s => s.IsDeleted).IsRequired().HasDefaultValue(false);
+            builder.Property(s => s.DeletedAt).IsRequired(false);
 
             // Indexes
-            builder.HasIndex(acs => acs.PatientId);
-            builder.HasIndex(acs => acs.CreatedAt);
-            builder.HasIndex(acs => acs.LastMessageAt);
-            builder.HasIndex(acs => new { acs.PatientId, acs.CreatedAt });
+            builder.HasIndex(s => s.PatientId);
+            builder.HasIndex(s => s.CreatedAt);
+            builder.HasIndex(s => s.LastMessageAt);
+            builder.HasIndex(s => new { s.PatientId, s.CreatedAt });
+            builder.HasIndex(s => new { s.PatientId, s.IsDeleted });
 
             // Relationships
-            builder.HasOne(acs => acs.Patient)
+            builder.HasOne(s => s.Patient)
                 .WithMany(p => p.AIChatSessions)
-                .HasForeignKey(acs => acs.PatientId)
+                .HasForeignKey(s => s.PatientId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            builder.HasMany(acs => acs.Messages)
+            builder.HasMany(s => s.Messages)
                 .WithOne(m => m.Session)
                 .HasForeignKey(m => m.SessionId)
                 .OnDelete(DeleteBehavior.Cascade);

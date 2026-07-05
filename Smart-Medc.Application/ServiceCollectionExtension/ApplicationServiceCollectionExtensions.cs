@@ -9,6 +9,7 @@ using Smart_Medc.Application.Interfaces.Services;
 using Smart_Medc.Application.Interfaces.Services.Auth;
 using Smart_Medc.Application.Interfaces.Storage;
 using Smart_Medc.Application.Services;
+using Smart_Medc.Application.Services.AI;
 using Smart_Medc.Application.Services.Auth;
 using Smart_Medc.Application.Services.DataSharing;
 using Smart_Medc.Application.Services.Notifications;
@@ -50,6 +51,9 @@ namespace Smart_Medc.Application.ServiceCollectionExtension
             // Register Admin Service
             services.AddScoped<IAdminService, AdminService>();
 
+            // Register PDF Export Service
+            services.AddScoped<IPdfExportService, PdfExportService>();
+
             // Register AutoMapper 
             services.AddAutoMapperConfig();
 
@@ -65,6 +69,8 @@ namespace Smart_Medc.Application.ServiceCollectionExtension
             // Register Data Sharing Services
             services.AddDataSharingServices();
 
+            services.AddAIChatServices(configuration);
+
             // Register Notification Services
             services.AddNotificationServices();
 
@@ -75,6 +81,8 @@ namespace Smart_Medc.Application.ServiceCollectionExtension
             services.AddScoped<IMedicalRecordService, MedicalRecordService>();
             services.AddScoped<IMedicationService, MedicationService>();
             services.AddScoped<IJournalService, JournalService>();
+            services.AddScoped<IPatientProfileService, PatientProfileService>();
+
             return services;
         }
 
@@ -103,9 +111,20 @@ namespace Smart_Medc.Application.ServiceCollectionExtension
             return services;
         }
 
+        private static IServiceCollection AddAIChatServices(this IServiceCollection services, IConfiguration configuration)
+        {
+            services.AddHttpClient<IAIChatService, AIChatService>(client =>
+            {
+                client.BaseAddress = new Uri(configuration["AIService:BaseUrl"]!);
+                client.Timeout = TimeSpan.FromMinutes(5);
+            });
+            return services;
+        }
+
         private static IServiceCollection AddNotificationServices(this IServiceCollection services)
         {
             services.AddScoped<INotificationService, NotificationService>();
+            services.AddScoped<INotificationPreferencesService, NotificationPreferencesService>();
             services.AddScoped<AppointmentReminderJob>();
             services.AddScoped<MedicationReminderJob>();
             services.AddScoped<AutoRejectAppointmentJob>();

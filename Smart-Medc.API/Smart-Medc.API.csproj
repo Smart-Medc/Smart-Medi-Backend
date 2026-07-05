@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Smart_Medc.API</RootNamespace>
+    <UserSecretsId>d2a4f447-61f2-41ad-8993-1490ff819442</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
