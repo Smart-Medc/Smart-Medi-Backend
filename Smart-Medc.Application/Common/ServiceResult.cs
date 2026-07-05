@@ -13,7 +13,7 @@
         public static ServiceResult<T> NotFound(string error = "Resource not found") =>
             new() { IsSuccess = false, ErrorMessage = error, StatusCode = 404 };
     }
-
+    
     public class ServiceResult
     {
         public bool IsSuccess { get; set; }

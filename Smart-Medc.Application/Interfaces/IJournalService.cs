@@ -11,6 +11,9 @@ namespace Smart_Medc.Application.Interfaces
         Task<ServiceResult<JournalEntryDetailDto>> GetEntryByIdAsync(
             Guid patientId, Guid entryId, CancellationToken ct = default);
 
+        Task<ServiceResult<List<JournalEntryDetailDto>>> GetAllEntryDetailsAsync(
+            Guid patientId, CancellationToken ct = default);
+
         Task<ServiceResult<JournalEntryDto>> CreateEntryAsync(
             Guid patientId, CreateJournalEntryDto dto, CancellationToken ct = default);
 

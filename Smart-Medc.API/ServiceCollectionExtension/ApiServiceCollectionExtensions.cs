@@ -8,6 +8,7 @@ using Smart_Medc.Appli.Services.Auth.Handlers;
 using Smart_Medc.Application.Common.Auth.Requirements;
 using Smart_Medc.Application.Common.Constants;
 using Smart_Medc.Application.Configuration;
+using Smart_Medc.Application.Interfaces;
 using Smart_Medc.Application.Interfaces.Notifications;
 using Smart_Medc.Infrastructure.Services.Auth.Handlers;
 using System.Text;
@@ -38,6 +39,8 @@ namespace Smart_Medc.API.ServiceCollectionExtension
 
             // Register Notification infrastructure services (e.g., INotificationHubPusher)
             services.AddNotificationInfrastructure();
+
+            services.AddChatHubDispatcher();
 
             return services;
         }
@@ -112,7 +115,8 @@ namespace Smart_Medc.API.ServiceCollectionExtension
                         var accessToken = context.Request.Query["access_token"];
                         var path = context.HttpContext.Request.Path;
                         if (!string.IsNullOrEmpty(accessToken) &&
-                            path.StartsWithSegments("/hubs/notifications"))
+                            (path.StartsWithSegments("/hubs/notifications") ||
+                             path.StartsWithSegments("/hubs/chat")))
                         {
                             context.Token = accessToken;
                         }
@@ -161,6 +165,12 @@ namespace Smart_Medc.API.ServiceCollectionExtension
                 options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
                 options.MaximumReceiveMessageSize = 32 * 1024;
             });
+            return services;
+        }
+
+        private static IServiceCollection AddChatHubDispatcher(this IServiceCollection services)
+        {
+            services.AddScoped<IChatHubDispatcher, ChatHubDispatcher>();
             return services;
         }
 

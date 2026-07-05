@@ -108,6 +108,19 @@ namespace Smart_Medc.Application.Services.Patient
             return ServiceResult<JournalEntryDetailDto>.Success(MapToDetailDto(entry));
         }
 
+        public async Task<ServiceResult<List<JournalEntryDetailDto>>> GetAllEntryDetailsAsync(
+            Guid patientId, CancellationToken ct = default)
+        {
+            var entries = await _unitOfWork.JournalEntries.QueryNoTracking()
+                .Where(e => e.PatientId == patientId && !e.IsDeleted)
+                .Include(e => e.Tags)
+                .OrderByDescending(e => e.EntryDate)
+                .ToListAsync(ct);
+
+            var result = entries.Select(MapToDetailDto).ToList();
+            return ServiceResult<List<JournalEntryDetailDto>>.Success(result);
+        }
+
         public async Task<ServiceResult<JournalEntryDto>> CreateEntryAsync(
             Guid patientId, CreateJournalEntryDto dto, CancellationToken ct = default)
         {

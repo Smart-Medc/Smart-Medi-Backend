@@ -31,27 +31,51 @@ namespace Smart_Medc.Infrastructure.Services.Storage
             string containerName,
             CancellationToken cancellationToken = default)
         {
-            var storagePath = $"{containerName}/{Guid.NewGuid()}/{fileName}";
+            if (fileStream == null) throw new ArgumentNullException(nameof(fileStream));
+            if (string.IsNullOrWhiteSpace(fileName)) throw new ArgumentException("File name is required", nameof(fileName));
+            if (string.IsNullOrWhiteSpace(contentType)) contentType = "application/octet-stream";
+            if (string.IsNullOrWhiteSpace(containerName)) throw new ArgumentException("Container name is required", nameof(containerName));
+
+            var safeFileName = Path.GetFileName(fileName);
+            var storagePath = $"{containerName}/{Guid.NewGuid()}/{safeFileName}";
+
+            // CRITICAL:
+            // Copy caller stream into an owned in-memory stream so we:
+            // 1) do not depend on caller stream lifetime,
+            // 2) avoid seek/position issues,
+            // 3) avoid side effects on caller stream used elsewhere.
+            await using var ownedStream = new MemoryStream();
+
+            if (fileStream.CanSeek)
+                fileStream.Position = 0;
+
+            await fileStream.CopyToAsync(ownedStream, cancellationToken);
+            ownedStream.Position = 0;
+
+            var contentLength = ownedStream.Length;
 
             var putRequest = new PutObjectRequest
             {
                 BucketName = _bucketName,
                 Key = storagePath,
-                InputStream = fileStream,
+                InputStream = ownedStream,
                 ContentType = contentType,
+                AutoCloseStream = false, // explicit: do not close owned stream before request fully completes
                 UseChunkEncoding = false
             };
-            putRequest.Headers.ContentLength = fileStream.Length;
+            putRequest.Headers.ContentLength = contentLength;
 
             await _s3Client.PutObjectAsync(putRequest, cancellationToken);
 
-            _logger.LogInformation("File uploaded: {StoragePath}, Size: {Size}", storagePath, fileStream.Length);
+            _logger.LogInformation(
+                "File uploaded: {StoragePath}, Size: {Size}, Bucket: {Bucket}",
+                storagePath, contentLength, _bucketName);
 
             return new FileUploadResult
             {
                 StoragePath = storagePath,
-                FileName = fileName,
-                FileSizeBytes = fileStream.Length,
+                FileName = safeFileName,
+                FileSizeBytes = contentLength,
                 ContentType = contentType
             };
         }
@@ -67,7 +91,7 @@ namespace Smart_Medc.Infrastructure.Services.Storage
                 Key = storagePath
             };
 
-            var response = await _s3Client.GetObjectAsync(getRequest, cancellationToken);
+            using var response = await _s3Client.GetObjectAsync(getRequest, cancellationToken);
 
             var memoryStream = new MemoryStream();
             await response.ResponseStream.CopyToAsync(memoryStream, cancellationToken);
