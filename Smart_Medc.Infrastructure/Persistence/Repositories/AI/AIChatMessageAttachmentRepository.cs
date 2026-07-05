@@ -8,14 +8,19 @@ namespace Smart_Medc.Infrastructure.Persistence.Repositories.AI
     {
         public AIChatMessageAttachmentRepository(ApplicationDbContext context) : base(context) { }
 
-        public async Task<IEnumerable<AIChatMessageAttachment>> GetByMessageIdAsync(
-            Guid messageId,
-            CancellationToken cancellationToken = default)
+        public async Task<List<AIChatMessageAttachment>> GetByMessageIdAsync(
+            Guid messageId, CancellationToken ct = default)
         {
             return await _dbSet
                 .Where(a => a.MessageId == messageId)
-                .OrderBy(a => a.UploadedAt)
-                .ToListAsync(cancellationToken);
+                .ToListAsync(ct);
+        }
+
+        public async Task<AIChatMessageAttachment?> GetByStoragePathAsync(
+            string storagePath, CancellationToken ct = default)
+        {
+            return await _dbSet
+                .FirstOrDefaultAsync(a => a.StoragePath == storagePath, ct);
         }
     }
 }

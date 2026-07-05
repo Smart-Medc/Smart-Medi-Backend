@@ -8,39 +8,26 @@ namespace Smart_Medc.Infrastructure.Persistence.Repositories.AI
     {
         public AIChatSessionRepository(ApplicationDbContext context) : base(context) { }
 
-        public async Task<IEnumerable<AIChatSession>> GetByPatientIdAsync(
-            Guid patientId,
-            CancellationToken cancellationToken = default)
+        public async Task<AIChatSession?> GetByIdWithMessagesAsync(
+            Guid id, CancellationToken ct = default)
         {
             return await _dbSet
                 .Include(s => s.Messages)
-                .Where(s => s.PatientId == patientId)
-                .OrderByDescending(s => s.LastMessageAt ?? s.CreatedAt)
-                .ToListAsync(cancellationToken);
+                .ThenInclude(m => m.Attachments)
+                .FirstOrDefaultAsync(s => s.Id == id, ct);
         }
 
-        public async Task<AIChatSession?> GetByIdWithMessagesAsync(
-            Guid sessionId,
-            CancellationToken cancellationToken = default)
+        public async Task<List<AIChatSession>> GetByPatientIdAsync(
+            Guid patientId, bool includeDeleted = false, CancellationToken ct = default)
         {
-            return await _dbSet
-                .Include(s => s.Messages.OrderBy(m => m.CreatedAt))
-                    .ThenInclude(m => m.Attachments)
-                .Include(s => s.Patient)
-                    .ThenInclude(p => p.User)
-                .FirstOrDefaultAsync(s => s.Id == sessionId, cancellationToken);
-        }
+            var query = _dbSet.Where(s => s.PatientId == patientId);
 
-        public async Task<IEnumerable<AIChatSession>> GetRecentSessionsAsync(
-            Guid patientId,
-            int count,
-            CancellationToken cancellationToken = default)
-        {
-            return await _dbSet
-                .Where(s => s.PatientId == patientId)
+            if (!includeDeleted)
+                query = query.Where(s => !s.IsDeleted);
+
+            return await query
                 .OrderByDescending(s => s.LastMessageAt ?? s.CreatedAt)
-                .Take(count)
-                .ToListAsync(cancellationToken);
+                .ToListAsync(ct);
         }
     }
 }

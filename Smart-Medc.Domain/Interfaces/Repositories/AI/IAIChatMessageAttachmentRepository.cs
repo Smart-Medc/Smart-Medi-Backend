@@ -4,6 +4,7 @@ namespace Smart_Medc.Domain.Interfaces.Repositories.AI
 {
     public interface IAIChatMessageAttachmentRepository : IRepository<AIChatMessageAttachment>
     {
-        Task<IEnumerable<AIChatMessageAttachment>> GetByMessageIdAsync(Guid messageId, CancellationToken cancellationToken = default);
+        Task<List<AIChatMessageAttachment>> GetByMessageIdAsync(Guid messageId, CancellationToken ct = default);
+        Task<AIChatMessageAttachment?> GetByStoragePathAsync(string storagePath, CancellationToken ct = default);
     }
 }

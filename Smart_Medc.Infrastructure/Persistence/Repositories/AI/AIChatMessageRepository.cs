@@ -8,24 +8,25 @@ namespace Smart_Medc.Infrastructure.Persistence.Repositories.AI
     {
         public AIChatMessageRepository(ApplicationDbContext context) : base(context) { }
 
-        public async Task<IEnumerable<AIChatMessage>> GetBySessionIdAsync(
-            Guid sessionId,
-            CancellationToken cancellationToken = default)
+        public async Task<List<AIChatMessage>> GetBySessionIdAsync(
+            Guid sessionId, bool includeDeleted = false, CancellationToken ct = default)
         {
-            return await _dbSet
-                .Include(m => m.Attachments)
-                .Where(m => m.SessionId == sessionId)
+            var query = _dbSet.Where(m => m.SessionId == sessionId);
+
+            if (!includeDeleted)
+                query = query.Where(m => !m.IsDeleted);
+
+            return await query
                 .OrderBy(m => m.CreatedAt)
-                .ToListAsync(cancellationToken);
+                .ToListAsync(ct);
         }
 
         public async Task<AIChatMessage?> GetByIdWithAttachmentsAsync(
-            Guid messageId,
-            CancellationToken cancellationToken = default)
+            Guid id, CancellationToken ct = default)
         {
             return await _dbSet
                 .Include(m => m.Attachments)
-                .FirstOrDefaultAsync(m => m.Id == messageId, cancellationToken);
+                .FirstOrDefaultAsync(m => m.Id == id, ct);
         }
     }
 }
