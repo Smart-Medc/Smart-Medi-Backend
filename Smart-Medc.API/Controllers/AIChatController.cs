@@ -58,5 +58,16 @@ namespace Smart_Medc.API.Controllers
                 ? Ok(new { success = true })
                 : StatusCode(result.StatusCode, result.ErrorMessage);
         }
+        [HttpPut("sessions/{sessionId:guid}/context-options")]
+        public async Task<IActionResult> UpdateSessionContextOptions(
+            Guid sessionId,
+            [FromBody] UpdateSessionContextOptionsDto dto,
+            CancellationToken ct)
+        {
+            var result = await _chatService.UpdateSessionContextOptionsAsync(sessionId, dto, ct);
+            return result.IsSuccess
+                ? Ok(result.Data)
+                : StatusCode(result.StatusCode, new { error = result.ErrorMessage });
+        }
     }
 }

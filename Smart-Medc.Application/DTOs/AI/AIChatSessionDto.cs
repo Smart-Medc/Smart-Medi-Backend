@@ -12,6 +12,10 @@ namespace Smart_Medc.Application.DTOs.AI
         public Guid PatientId { get; set; }
         public string? Title { get; set; }
         public bool UseMedicalRecordsContext { get; set; }
+        public bool IncludeMedicalRecords { get; set; }
+        public bool IncludeCurrentMedications { get; set; }
+        public bool IncludePastMedications { get; set; }
+        public bool IncludeJournalEntries { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? LastMessageAt { get; set; }
         public int MessageCount { get; set; }

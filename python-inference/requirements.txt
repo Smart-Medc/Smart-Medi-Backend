@@ -5,3 +5,5 @@ accelerate
 pillow
 python-multipart
 bitsandbytes  # optional, for 4‑bit quantization
+pypdf==4.3.1
+python-docx==1.1.2

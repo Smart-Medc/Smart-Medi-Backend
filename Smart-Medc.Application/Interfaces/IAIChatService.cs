@@ -24,5 +24,7 @@ namespace Smart_Medc.Application.Interfaces
         Task<ServiceResult<List<AIChatSessionDto>>> GetPatientSessionsAsync(
             Guid patientId, CancellationToken ct = default);
         Task<ServiceResult<bool>> DeleteSessionAsync(Guid sessionId, CancellationToken ct);
+        Task<ServiceResult<AIChatSessionDto>> UpdateSessionContextOptionsAsync(
+            Guid sessionId, UpdateSessionContextOptionsDto dto, CancellationToken ct);
     }
 }

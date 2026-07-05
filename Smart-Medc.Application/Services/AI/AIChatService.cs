@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using Smart_Medc.Application.Common;
 using Smart_Medc.Application.DTOs.AI;
+using Smart_Medc.Application.DTOs.Journal;
 using Smart_Medc.Application.DTOs.MedicalRecord;
 using Smart_Medc.Application.Interfaces;
 using Smart_Medc.Domain.Entities.AI;
@@ -19,11 +20,13 @@ namespace Smart_Medc.Application.Services.AI
         private readonly ILogger<AIChatService> _logger;
         private readonly HttpClient _aiClient;
         private readonly IMedicalRecordService _medicalRecordService;
+        private readonly IMedicationService _medicationService;
+        private readonly IJournalService _journalService;
         private readonly IChatHubDispatcher _hubDispatcher;
 
         private const string AiChatContainer = "ai-chat-attachments";
-        private const int MaxContextMessages = 6;
-        private static readonly TimeSpan AiTimeout = TimeSpan.FromMinutes(4);
+        private const int MaxContextMessages = 8;
+        private static readonly TimeSpan AiTimeout = TimeSpan.FromMinutes(10);
 
         public AIChatService(
             IUnitOfWork unitOfWork,
@@ -31,6 +34,8 @@ namespace Smart_Medc.Application.Services.AI
             ILogger<AIChatService> logger,
             HttpClient aiClient,
             IMedicalRecordService medicalRecordService,
+            IMedicationService medicationService,
+            IJournalService journalService,
             IChatHubDispatcher hubDispatcher)
         {
             _unitOfWork = unitOfWork;
@@ -38,6 +43,8 @@ namespace Smart_Medc.Application.Services.AI
             _logger = logger;
             _aiClient = aiClient;
             _medicalRecordService = medicalRecordService;
+            _medicationService = medicationService;
+            _journalService = journalService;
             _hubDispatcher = hubDispatcher;
         }
 
@@ -54,6 +61,10 @@ namespace Smart_Medc.Application.Services.AI
                 PatientId = patientId,
                 Title = dto.Title,
                 UseMedicalRecordsContext = dto.UseMedicalRecordsContext,
+                IncludeMedicalRecords = dto.IncludeMedicalRecords,
+                IncludeCurrentMedications = dto.IncludeCurrentMedications,
+                IncludePastMedications = dto.IncludePastMedications,
+                IncludeJournalEntries = dto.IncludeJournalEntries,
                 CreatedAt = DateTime.UtcNow,
                 LastMessageAt = null
             };
@@ -62,6 +73,28 @@ namespace Smart_Medc.Application.Services.AI
             await _unitOfWork.SaveChangesAsync(ct);
 
             return ServiceResult<AIChatSessionDto>.Success(MapToSessionDto(session, 0));
+        }
+
+        public async Task<ServiceResult<AIChatSessionDto>> UpdateSessionContextOptionsAsync(
+            Guid sessionId, UpdateSessionContextOptionsDto dto, CancellationToken ct)
+        {
+            var session = await _unitOfWork.AIChatSessions.GetByIdAsync(sessionId, ct);
+            if (session == null || session.IsDeleted)
+                return ServiceResult<AIChatSessionDto>.NotFound("Session not found");
+
+            session.UseMedicalRecordsContext = dto.UseMedicalRecordsContext;
+            session.IncludeMedicalRecords = dto.IncludeMedicalRecords;
+            session.IncludeCurrentMedications = dto.IncludeCurrentMedications;
+            session.IncludePastMedications = dto.IncludePastMedications;
+            session.IncludeJournalEntries = dto.IncludeJournalEntries;
+
+            await _unitOfWork.AIChatSessions.UpdateAsync(session, ct);
+            await _unitOfWork.SaveChangesAsync(ct);
+
+            var messageCount = await _unitOfWork.AIChatMessages.CountAsync(
+                m => m.SessionId == session.Id && !m.IsDeleted, ct);
+
+            return ServiceResult<AIChatSessionDto>.Success(MapToSessionDto(session, messageCount));
         }
 
         public async Task<ServiceResult<AIChatMessageDto>> SendMessageAsync(
@@ -97,7 +130,6 @@ namespace Smart_Medc.Application.Services.AI
             try
             {
                 await _unitOfWork.AIChatMessages.AddAsync(userMessage, ct);
-
                 multipartContent = new MultipartFormDataContent();
 
                 if (files != null)
@@ -162,7 +194,6 @@ namespace Smart_Medc.Application.Services.AI
                 };
 
                 using var aiCts = new CancellationTokenSource(AiTimeout);
-
                 using var response = await _aiClient.SendAsync(
                     request,
                     HttpCompletionOption.ResponseHeadersRead,
@@ -205,7 +236,6 @@ namespace Smart_Medc.Application.Services.AI
                                 {
                                     try
                                     {
-                                        // immediate per-token dispatch to frontend
                                         await _hubDispatcher.SendTokenAsync(connectionId, token, CancellationToken.None);
                                     }
                                     catch (Exception hubEx)
@@ -257,21 +287,15 @@ namespace Smart_Medc.Application.Services.AI
             finally
             {
                 multipartContent?.Dispose();
-
-                foreach (var s in aiStreams)
-                    await s.DisposeAsync();
+                foreach (var s in aiStreams) await s.DisposeAsync();
             }
 
             if (assistantContent.Length == 0)
             {
                 assistantContent.Append("I'm sorry, I couldn't generate a response. Please try again.");
-
                 if (!string.IsNullOrEmpty(connectionId))
                 {
-                    try
-                    {
-                        await _hubDispatcher.SendTokenAsync(connectionId, assistantContent.ToString(), CancellationToken.None);
-                    }
+                    try { await _hubDispatcher.SendTokenAsync(connectionId, assistantContent.ToString(), CancellationToken.None); }
                     catch { }
                 }
             }
@@ -286,37 +310,20 @@ namespace Smart_Medc.Application.Services.AI
                 CreatedAt = DateTime.UtcNow
             };
 
-            try
-            {
-                await _unitOfWork.AIChatMessages.AddAsync(assistantMessage, ct);
-                session.LastMessageAt = DateTime.UtcNow;
-                await _unitOfWork.SaveChangesAsync(ct);
-            }
-            catch (OperationCanceledException)
-            {
-                using var saveCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                await _unitOfWork.AIChatMessages.AddAsync(assistantMessage, saveCts.Token);
-                session.LastMessageAt = DateTime.UtcNow;
-                await _unitOfWork.SaveChangesAsync(saveCts.Token);
-            }
+            await _unitOfWork.AIChatMessages.AddAsync(assistantMessage, ct);
+            session.LastMessageAt = DateTime.UtcNow;
+            await _unitOfWork.SaveChangesAsync(ct);
 
             if (!string.IsNullOrEmpty(connectionId))
             {
-                try
-                {
-                    await _hubDispatcher.SendCompletionAsync(connectionId, assistantMessage.Id, CancellationToken.None);
-                }
-                catch (Exception hubEx)
-                {
-                    _logger.LogWarning(hubEx, "Hub completion send failed for session {SessionId}", sessionId);
-                }
+                try { await _hubDispatcher.SendCompletionAsync(connectionId, assistantMessage.Id, CancellationToken.None); }
+                catch { }
             }
 
             return ServiceResult<AIChatMessageDto>.Success(MapToMessageDto(assistantMessage));
         }
 
-        public async Task<ServiceResult<List<AIChatMessageDto>>> GetSessionMessagesAsync(
-            Guid sessionId, CancellationToken ct)
+        public async Task<ServiceResult<List<AIChatMessageDto>>> GetSessionMessagesAsync(Guid sessionId, CancellationToken ct)
         {
             var session = await _unitOfWork.AIChatSessions.GetByIdWithMessagesAsync(sessionId, ct);
             if (session == null || session.IsDeleted)
@@ -331,8 +338,7 @@ namespace Smart_Medc.Application.Services.AI
             return ServiceResult<List<AIChatMessageDto>>.Success(messages);
         }
 
-        public async Task<ServiceResult<List<AIChatSessionDto>>> GetPatientSessionsAsync(
-            Guid patientId, CancellationToken ct)
+        public async Task<ServiceResult<List<AIChatSessionDto>>> GetPatientSessionsAsync(Guid patientId, CancellationToken ct)
         {
             var sessions = await _unitOfWork.AIChatSessions.GetByPatientIdAsync(patientId, false, ct);
 
@@ -342,9 +348,7 @@ namespace Smart_Medc.Application.Services.AI
                 var messageCount = await _unitOfWork.AIChatMessages.CountAsync(
                     m => m.SessionId == s.Id && !m.IsDeleted, ct);
 
-                // keep empty sessions hidden from history, but do not delete here
                 if (messageCount == 0) continue;
-
                 dtos.Add(MapToSessionDto(s, messageCount));
             }
 
@@ -373,6 +377,152 @@ namespace Smart_Medc.Application.Services.AI
             return ServiceResult<bool>.Success(true);
         }
 
+        private async Task<List<Dictionary<string, string>>> BuildMessagesListAsync(
+            AIChatSession session, string userText, Guid? excludeMessageId, CancellationToken ct)
+        {
+            var messages = new List<Dictionary<string, string>>
+            {
+                new()
+                {
+                    { "role", "system" },
+                    { "content", "You are MedGemma, a medical AI assistant. Use provided patient context sections when available (medical records, medications, journals) to personalize explanations. You can diagnose, prescribe, but not replace clinician judgment. Explain clearly, reference provided data explicitly, highlight uncertainty, and recommend professional follow-up for concerning findings." }
+                }
+            };
+
+            if (session.UseMedicalRecordsContext)
+            {
+                var ctx = new StringBuilder();
+                ctx.AppendLine("PATIENT CONTEXT (RAW)");
+                ctx.AppendLine();
+
+                if (session.IncludeMedicalRecords)
+                {
+                    ctx.AppendLine("=== MEDICAL RECORDS ===");
+                    var stats = await _medicalRecordService.GetStatisticsAsync(session.PatientId, ct);
+                    var records = await _medicalRecordService.GetPatientRecordsAsync(
+                        session.PatientId,
+                        new MedicalRecordQueryDto
+                        {
+                            PageNumber = 1,
+                            PageSize = 1000,
+                            SortBy = "RecordDate",
+                            SortDescending = true
+                        },
+                        ct);
+
+                    if (stats.IsSuccess && stats.Data != null)
+                    {
+                        var s = stats.Data;
+                        ctx.AppendLine($"Totals: Total={s.TotalRecords}, Labs={s.LabReports}, Imaging={s.Imaging}, Consultations={s.ConsultationNotes}, Immunizations={s.Immunizations}, Other={s.Other}");
+                    }
+
+                    if (records.IsSuccess && records.Data != null && records.Data.Items.Any())
+                    {
+                        foreach (var r in records.Data.Items)
+                        {
+                            ctx.AppendLine($"- [{r.RecordDate:yyyy-MM-dd}] {r.RecordTypeName} | Title={r.Title}");
+                            ctx.AppendLine($"  Provider={r.ProviderName ?? "N/A"} | OrderedBy={r.OrderedBy ?? "N/A"}");
+                            ctx.AppendLine($"  Description={r.Description ?? "N/A"}");
+                            ctx.AppendLine($"  FindingsSummary={r.FindingsSummary ?? "N/A"}");
+                        }
+                    }
+                    else ctx.AppendLine("No medical records found.");
+                    ctx.AppendLine();
+                }
+
+                if (session.IncludeCurrentMedications || session.IncludePastMedications)
+                {
+                    ctx.AppendLine("=== MEDICATIONS ===");
+                    var meds = await _medicationService.GetMedicationsAsync(session.PatientId, includeInactive: true, ct);
+
+                    if (meds.IsSuccess && meds.Data != null)
+                    {
+                        var now = DateTime.UtcNow.Date;
+                        var all = meds.Data;
+
+                        var current = all.Where(m =>
+                            m.StatusName.Equals("Active", StringComparison.OrdinalIgnoreCase) ||
+                            (!m.EndDate.HasValue || m.EndDate.Value.Date >= now)).ToList();
+
+                        var past = all.Where(m => current.All(c => c.Id != m.Id)).ToList();
+
+                        if (session.IncludeCurrentMedications)
+                        {
+                            ctx.AppendLine("-- Current --");
+                            if (!current.Any()) ctx.AppendLine("None");
+                            foreach (var m in current)
+                            {
+                                ctx.AppendLine($"- {m.Name} | Dosage={m.Dosage} | Frequency={m.Frequency} | Route={m.RouteName}");
+                                ctx.AppendLine($"  Start={m.StartDate:yyyy-MM-dd} | End={(m.EndDate.HasValue ? m.EndDate.Value.ToString("yyyy-MM-dd") : "Ongoing")}");
+                                ctx.AppendLine($"  Prescriber={m.PrescribingDoctor ?? "N/A"}");
+                                ctx.AppendLine($"  Instructions={m.Instructions ?? "N/A"}");
+                                ctx.AppendLine($"  InteractionFlag={m.HasInteraction} | InteractionNotes={m.InteractionNotes ?? "N/A"}");
+                            }
+                        }
+
+                        if (session.IncludePastMedications)
+                        {
+                            ctx.AppendLine("-- Past --");
+                            if (!past.Any()) ctx.AppendLine("None");
+                            foreach (var m in past)
+                            {
+                                ctx.AppendLine($"- {m.Name} | Dosage={m.Dosage} | Frequency={m.Frequency} | Route={m.RouteName}");
+                                ctx.AppendLine($"  Start={m.StartDate:yyyy-MM-dd} | End={(m.EndDate.HasValue ? m.EndDate.Value.ToString("yyyy-MM-dd") : "N/A")}");
+                                ctx.AppendLine($"  Prescriber={m.PrescribingDoctor ?? "N/A"}");
+                                ctx.AppendLine($"  Instructions={m.Instructions ?? "N/A"}");
+                            }
+                        }
+                    }
+                    else ctx.AppendLine("No medications found.");
+                    ctx.AppendLine();
+                }
+
+                if (session.IncludeJournalEntries)
+                {
+                    ctx.AppendLine("=== JOURNAL ENTRIES (FULL TEXT) ===");
+                    var journals = await _journalService.GetAllEntryDetailsAsync(session.PatientId, ct);
+                    if (journals.IsSuccess && journals.Data != null && journals.Data.Any())
+                    {
+                        foreach (var j in journals.Data.OrderByDescending(x => x.EntryDate))
+                        {
+                            ctx.AppendLine($"- [{j.EntryDate:yyyy-MM-dd}] Title={j.Title}");
+                            ctx.AppendLine($"  Mood={j.MoodLevel?.ToString() ?? "N/A"} | Pain={j.PainLevel?.ToString() ?? "N/A"}");
+                            ctx.AppendLine($"  Symptoms={(j.Symptoms.Any() ? string.Join(", ", j.Symptoms) : "N/A")}");
+                            ctx.AppendLine($"  Tags={(j.Tags.Any() ? string.Join(", ", j.Tags) : "N/A")}");
+                            ctx.AppendLine($"  Content={j.Content}");
+                        }
+                    }
+                    else ctx.AppendLine("No journal entries found.");
+                    ctx.AppendLine();
+                }
+
+                messages.Add(new Dictionary<string, string>
+                {
+                    { "role", "system" },
+                    { "content", ctx.ToString() }
+                });
+            }
+
+            var recentMessages = await _unitOfWork.AIChatMessages.GetBySessionIdAsync(session.Id, false, ct);
+            foreach (var msg in recentMessages.TakeLast(MaxContextMessages))
+            {
+                if (excludeMessageId.HasValue && msg.Id == excludeMessageId.Value) continue;
+                messages.Add(new Dictionary<string, string>
+                {
+                    { "role", msg.Role == MessageRole.User ? "user" : "assistant" },
+                    { "content", msg.Content }
+                });
+            }
+
+            messages.Add(new Dictionary<string, string>
+            {
+                { "role", "user" },
+                { "content", userText }
+            });
+
+            return messages;
+        }
+
         private async Task SafeRollbackUserMessageAsync(AIChatMessage userMessage)
         {
             try
@@ -388,77 +538,8 @@ namespace Smart_Medc.Application.Services.AI
 
         private async Task SafeHubErrorAsync(string connectionId, string message)
         {
-            try
-            {
-                await _hubDispatcher.SendErrorAsync(connectionId, message, CancellationToken.None);
-            }
+            try { await _hubDispatcher.SendErrorAsync(connectionId, message, CancellationToken.None); }
             catch { }
-        }
-
-        private async Task<List<Dictionary<string, string>>> BuildMessagesListAsync(
-            AIChatSession session, string userText, Guid? excludeMessageId, CancellationToken ct)
-        {
-            var messages = new List<Dictionary<string, string>>
-            {
-                new()
-                {
-                    { "role", "system" },
-                    {
-                        "content",
-                        "You are MedGemma, a helpful medical AI assistant that can analyze medical images and lab reports. Provide clear, accurate explanations in simple language."
-                    }
-                }
-            };
-
-            if (session.UseMedicalRecordsContext)
-            {
-                var statsResult = await _medicalRecordService.GetStatisticsAsync(session.PatientId, ct);
-                if (statsResult.IsSuccess)
-                {
-                    var sb = new StringBuilder();
-                    sb.AppendLine("Here is a summary of the patient's medical records:");
-                    sb.AppendLine($"Total records: {statsResult.Data!.TotalRecords}");
-                    sb.AppendLine($"Lab reports: {statsResult.Data.LabReports}, Imaging: {statsResult.Data.Imaging}, Consultations: {statsResult.Data.ConsultationNotes}");
-
-                    var recordsResult = await _medicalRecordService.GetPatientRecordsAsync(
-                        session.PatientId,
-                        new MedicalRecordQueryDto { PageSize = 3, SortDescending = true },
-                        ct);
-
-                    if (recordsResult.IsSuccess)
-                    {
-                        foreach (var rec in recordsResult.Data!.Items)
-                            sb.AppendLine($"- {rec.Title}: {rec.FindingsSummary ?? "No summary"}");
-                    }
-
-                    messages.Add(new Dictionary<string, string>
-                    {
-                        { "role", "system" },
-                        { "content", sb.ToString() }
-                    });
-                }
-            }
-
-            var recentMessages = await _unitOfWork.AIChatMessages.GetBySessionIdAsync(session.Id, false, ct);
-            foreach (var msg in recentMessages.TakeLast(MaxContextMessages))
-            {
-                if (excludeMessageId.HasValue && msg.Id == excludeMessageId.Value) continue;
-
-                var role = msg.Role == MessageRole.User ? "user" : "assistant";
-                messages.Add(new Dictionary<string, string>
-                {
-                    { "role", role },
-                    { "content", msg.Content }
-                });
-            }
-
-            messages.Add(new Dictionary<string, string>
-            {
-                { "role", "user" },
-                { "content", userText }
-            });
-
-            return messages;
         }
 
         private static AIChatSessionDto MapToSessionDto(AIChatSession session, int messageCount) => new()
@@ -467,6 +548,10 @@ namespace Smart_Medc.Application.Services.AI
             PatientId = session.PatientId,
             Title = session.Title,
             UseMedicalRecordsContext = session.UseMedicalRecordsContext,
+            IncludeMedicalRecords = session.IncludeMedicalRecords,
+            IncludeCurrentMedications = session.IncludeCurrentMedications,
+            IncludePastMedications = session.IncludePastMedications,
+            IncludeJournalEntries = session.IncludeJournalEntries,
             CreatedAt = session.CreatedAt,
             LastMessageAt = session.LastMessageAt,
             MessageCount = messageCount

@@ -6,10 +6,10 @@ using System.Threading.Tasks;
 
 namespace Smart_Medc.Application.DTOs.AI
 {
-    public class CreateSessionRequestDto
+    public class UpdateSessionContextOptionsDto
     {
-        public string? Title { get; set; }
-        public bool UseMedicalRecordsContext { get; set; } = false;
+        public bool UseMedicalRecordsContext { get; set; }
+
         public bool IncludeMedicalRecords { get; set; } = true;
         public bool IncludeCurrentMedications { get; set; } = false;
         public bool IncludePastMedications { get; set; } = false;
