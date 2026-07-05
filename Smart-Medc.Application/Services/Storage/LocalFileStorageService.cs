@@ -92,7 +92,7 @@ namespace Smart_Medc.Application.Services.Storage
             }
         }
 
-        public string GetFileUrl(string filePath)
+        public string GetFileUrl(string filePath = "")
         {
             // Return URL path: /uploads/{folder}/{filename}
             return $"/uploads/{filePath}";
