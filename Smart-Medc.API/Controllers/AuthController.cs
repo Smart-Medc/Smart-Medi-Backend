@@ -6,11 +6,12 @@
 ///  <summary>
 
 
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Smart_Medc.Application.Common.Helpers;
 using Smart_Medc.Application.DTOs.Auth;
 using Smart_Medc.Application.Interfaces.Services.Auth;
-using System.Security.Claims;
 
 namespace Smart_Medc.API.Controllers
 {
@@ -37,6 +38,7 @@ namespace Smart_Medc.API.Controllers
             //if (!ModelState.IsValid)
             //    return BadRequest(ModelState);
 
+            var clientType = Request.GetClientType();
             var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
             var result = await _authService.LoginAsync(request, ipAddress);
 
@@ -68,10 +70,28 @@ namespace Smart_Medc.API.Controllers
                 return Unauthorized(new { success = false, message = result.Message, errors = result.Errors });
             }
 
+            if (clientType == ClientType.Mobile)
+            {
+                _logger.LogInformation("User {Email} logged in successfully from IP {IP} using Mobile client", request.Email, ipAddress);
+                return Ok(new
+                {
+                    success = true,
+                    message = result.Message,
+                    data = new
+                    {
+                        accessToken = result?.Data?.AccessToken,
+                        refreshToken = result?.Data?.RefreshToken,
+                        accessTokenExpiresAt = result?.Data?.AccessTokenExpiresAt,
+                        refreshTokenExpiresAt = result?.Data?.RefreshTokenExpiresAt,
+                        user = result?.Data?.User
+                    }
+                });
+            }
+
             // Store refresh token in HttpOnly cookie
             SetRefreshTokenCookie(result.Data!.RefreshToken);
 
-            _logger.LogInformation("User {Email} logged in successfully from IP {IP}", request.Email, ipAddress);
+            _logger.LogInformation("User {Email} logged in successfully from IP {IP} using web client", request.Email, ipAddress);
 
             return Ok(new
             {
@@ -127,6 +147,7 @@ namespace Smart_Medc.API.Controllers
             //if (!ModelState.IsValid)
             //    return BadRequest(ModelState);
 
+            var clientType = Request.GetClientType();
             var result = await _authService.VerifyEmailAsync(request);
 
             if (!result.IsSuccess)
@@ -134,9 +155,29 @@ namespace Smart_Medc.API.Controllers
 
             _logger.LogInformation("Email verified successfully for {Email}", request.Email);
 
+
+            if (clientType == ClientType.Mobile)
+            {
+                _logger.LogInformation("User {Email} logged in successfully from IP {IP} using Mobile client after email verification", request.Email, HttpContext.Connection.RemoteIpAddress?.ToString());
+                return Ok(new
+                {
+                    success = true,
+                    message = result.Message,
+                    data = new
+                    {
+                        accessToken = result?.Data?.AccessToken,
+                        refreshToken = result?.Data?.RefreshToken,
+                        accessTokenExpiresAt = result?.Data?.AccessTokenExpiresAt,
+                        refreshTokenExpiresAt = result?.Data?.RefreshTokenExpiresAt,
+                        user = result?.Data?.User
+                    }
+                });
+            }
+
             // Store refresh token in HTTP-only cookie
             SetRefreshTokenCookie(result.Data!.RefreshToken);
 
+            _logger.LogInformation("User {Email} logged in successfully from IP {IP} using web client after email verification", request.Email, HttpContext.Connection.RemoteIpAddress?.ToString());
             return Ok(new
             {
                 success = true,
@@ -220,15 +261,16 @@ namespace Smart_Medc.API.Controllers
         /// </summary>
         [HttpPost("refresh-token")]
         [AllowAnonymous]
-        public async Task<IActionResult> RefreshToken()
+        public async Task<IActionResult> RefreshToken([FromQuery] string? refreshToken)
         {
             //if (!ModelState.IsValid)
             //    return BadRequest(ModelState);
 
+            var clientType = Request.GetClientType();
             var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
 
-            // read refresh token from HTTP-only cookie
-            var refreshToken = Request.Cookies["refreshToken"];
+            refreshToken ??= Request.Cookies["refreshToken"];
+
             if (string.IsNullOrEmpty(refreshToken))
                 return Unauthorized("Invalid refresh token");
 
@@ -237,9 +279,29 @@ namespace Smart_Medc.API.Controllers
             if (!result.IsSuccess)
                 return Unauthorized(new { message = result.Message, errors = result.Errors });
 
+
+            if (clientType == ClientType.Mobile)
+            {
+                _logger.LogInformation("Access token refreshed for user {Email} from IP {IP} using Mobile client", result.Data?.User?.Email, ipAddress);
+                return Ok(new
+                {
+                    success = true,
+                    message = result.Message,
+                    data = new
+                    {
+                        accessToken = result?.Data?.AccessToken,
+                        refreshToken = result?.Data?.RefreshToken,
+                        accessTokenExpiresAt = result?.Data?.AccessTokenExpiresAt,
+                        refreshTokenExpiresAt = result?.Data?.RefreshTokenExpiresAt,
+                        user = result?.Data?.User
+                    }
+                });
+            }
+
             // Store new refresh token in HTTP-only cookie
             SetRefreshTokenCookie(result.Data!.RefreshToken);
 
+            _logger.LogInformation("Access token refreshed for user {Email} from IP {IP} using web client", result.Data?.User?.Email, ipAddress);
             return Ok(new
             {
                 success = true,
@@ -258,18 +320,18 @@ namespace Smart_Medc.API.Controllers
         /// </summary>
         [HttpPost("logout")]
         [Authorize]
-        public async Task<IActionResult> Logout()
+        public async Task<IActionResult> Logout([FromQuery] string? refreshToken)
         {
             var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
 
-            // read refresh token from HTTP-only cookie
-            var refreshToken = Request.Cookies["refreshToken"];
+            refreshToken ??= Request.Cookies["refreshToken"];
             if (string.IsNullOrEmpty(refreshToken))
                 return Unauthorized();
 
             var result = await _authService.LogoutAsync(refreshToken, ipAddress);
 
-            ClearRefreshTokenCookie();
+            if (Request.GetClientType() == ClientType.Web)
+                ClearRefreshTokenCookie();
 
             return Ok(new { success = true, message = result.Message });
         }
@@ -289,7 +351,8 @@ namespace Smart_Medc.API.Controllers
             var result = await _authService.RevokeAllTokensAsync(userGuid); // Revoke all refresh tokens for the user in the database
 
             // Clear refresh token cookie
-            ClearRefreshTokenCookie();
+            if (Request.GetClientType() == ClientType.Web)
+                ClearRefreshTokenCookie();
 
             return Ok(new { success = true, message = result.Message });
         }
@@ -318,7 +381,8 @@ namespace Smart_Medc.API.Controllers
                 return BadRequest(new { message = result.Message, errors = result.Errors });
 
             // Clear refresh token cookie since all tokens are revoked
-            ClearRefreshTokenCookie();
+            if (Request.GetClientType() == ClientType.Web)
+                ClearRefreshTokenCookie();
 
             return Ok(new { success = true, message = result.Message });
         }
@@ -734,16 +798,34 @@ namespace Smart_Medc.API.Controllers
             //if (!ModelState.IsValid)
             //    return BadRequest(ModelState);
 
+            var clientType = Request.GetClientType();
             var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
             var result = await _authService.Verify2FALoginAsync(request, ipAddress);
 
             if (!result.IsSuccess)
                 return BadRequest(new { success = false, message = result.Message, errors = result.Errors });
 
+            if (clientType == ClientType.Mobile)
+            {
+                _logger.LogInformation("2FA verification successful for {Email} from IP {IP} using Mobile client", request.Email, ipAddress);
+                return Ok(new
+                {
+                    success = true,
+                    message = result.Message,
+                    data = new
+                    {
+                        accessToken = result?.Data?.AccessToken,
+                        refreshToken = result?.Data?.RefreshToken,
+                        accessTokenExpiresAt = result?.Data?.AccessTokenExpiresAt,
+                        refreshTokenExpiresAt = result?.Data?.RefreshTokenExpiresAt,
+                        user = result?.Data?.User
+                    }
+                });
+            }
             // Store refresh token in HTTP-only cookie
             SetRefreshTokenCookie(result.Data!.RefreshToken);
 
-            _logger.LogInformation("2FA verification successful for {Email} from IP {IP}", request.Email, ipAddress);
+            _logger.LogInformation("2FA verification successful for {Email} from IP {IP} using web client", request.Email, ipAddress);
 
             return Ok(new
             {
