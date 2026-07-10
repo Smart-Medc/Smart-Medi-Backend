@@ -144,9 +144,27 @@ namespace Smart_Medc.Application.Services.Organization
                 var dateOnly = DateOnly.FromDateTime(date);
 
                 // Check if closed by exception
-                if (exceptionsDict.TryGetValue(dateOnly, out var exception) && exception.IsFullDayOff)
+                if (exceptionsDict.TryGetValue(dateOnly, out var exception))
                 {
-                    status = "Closed";
+                    if (exception.IsFullDayOff)
+                    {
+                        status = "Closed";
+                    }
+                    else if (exception.StartTime.HasValue && exception.EndTime.HasValue)
+                    {
+                        // Partial-day exception — use exception hours for slot counting
+                        var openTime = exception.StartTime.Value.ToTimeSpan();
+                        var closeTime = exception.EndTime.Value.ToTimeSpan();
+                        var totalMinutes = (closeTime - openTime).TotalMinutes;
+                        var totalSlots = (int)(totalMinutes / slotDuration.TotalMinutes);
+                        var bookedCount = appointmentsByDate
+                            .TryGetValue(date.Date, out var c) ? c : 0;
+
+                        status = (totalSlots > 0 && bookedCount >= totalSlots)
+                            ? "Fully Booked"
+                            : "Available";
+                    }
+                    // else: malformed exception — treat as available
                 }
                 // Check regular operating hours
                 else if (hoursDict.TryGetValue(date.DayOfWeek, out var hours))
@@ -167,13 +185,12 @@ namespace Smart_Medc.Application.Services.Organization
                         var totalSlots = (int)(totalMinutes / slotDuration.TotalMinutes);
 
                         // Get number of booked appointments for this date
-                        var bookedCount = appointmentsByDate.TryGetValue(date.Date, out var count) ? count : 0;
+                        var bookedCount = appointmentsByDate
+                            .TryGetValue(date.Date, out var c) ? c : 0;
 
                         // If all slots are taken, mark as fully booked
                         if (totalSlots > 0 && bookedCount >= totalSlots)
-                        {
                             status = "Fully Booked";
-                        }
 
                         // Otherwise, it remains "Available"
                     }
@@ -195,7 +212,8 @@ namespace Smart_Medc.Application.Services.Organization
             CancellationToken cancellationToken = default)
         {
             // Validate organization exists
-            var organization = await _unitOfWork.Organizations.GetByIdAsync(organizationId, cancellationToken);
+            var organization = await _unitOfWork.Organizations
+                .GetByIdAsync(organizationId, cancellationToken);
             if (organization == null)
                 throw new KeyNotFoundException("Organization not found");
 
@@ -205,24 +223,43 @@ namespace Smart_Medc.Application.Services.Organization
 
             // Validate date is not too far in the future
             if (date.Date > DateTime.UtcNow.Date.AddYears(1))
-                throw new ArgumentException("Cannot get time slots more than 1 year in advance");
+                throw new ArgumentException(
+                    "Cannot get time slots more than 1 year in advance");
 
-            var dayOfWeek = (int)date.DayOfWeek;
-
-            // Get operating hours for the day
-            var operatingHours = await _unitOfWork.OrganizationOperatingHours
-                .GetByDayAsync(organizationId, dayOfWeek, cancellationToken);
-
-            if (operatingHours == null || !operatingHours.IsOpen ||
-                operatingHours.OpenTime == null || operatingHours.CloseTime == null)
-                return new List<TimeSlotDto>();
-
-            // Check for exception on this date
+            // Check for exception FIRST — it overrides operating hours
             var exception = await _unitOfWork.OrganizationAvailabilityExceptions
                 .GetByDateAsync(organizationId, date, cancellationToken);
 
+            // Full day off — no slots
             if (exception != null && exception.IsFullDayOff)
                 return new List<TimeSlotDto>();
+
+            // Determine effective open/close times
+            TimeOnly effectiveOpen;
+            TimeOnly effectiveClose;
+
+            if (exception != null && !exception.IsFullDayOff
+                && exception.StartTime.HasValue && exception.EndTime.HasValue)
+            {
+                // Partial-day exception overrides the weekly template hours
+                effectiveOpen = exception.StartTime.Value;
+                effectiveClose = exception.EndTime.Value;
+            }
+            else
+            {
+                // Fall back to weekly operating hours
+                var dayOfWeek = (int)date.DayOfWeek;
+                var operatingHours = await _unitOfWork.OrganizationOperatingHours
+                    .GetByDayAsync(organizationId, dayOfWeek, cancellationToken);
+
+                if (operatingHours == null || !operatingHours.IsOpen
+                    || operatingHours.OpenTime == null
+                    || operatingHours.CloseTime == null)
+                    return new List<TimeSlotDto>();
+
+                effectiveOpen = operatingHours.OpenTime.Value;
+                effectiveClose = operatingHours.CloseTime.Value;
+            }
 
             // Get existing appointments for this date
             var appointments = await _unitOfWork.Appointments.GetByDateRangeAsync(
@@ -232,19 +269,18 @@ namespace Smart_Medc.Application.Services.Organization
                 cancellationToken);
 
             var confirmedAppointments = appointments
-                .Where(a => a.Status != AppointmentStatus.Cancelled &&
-                           a.Status != AppointmentStatus.Rejected &&
-                           a.Status != AppointmentStatus.NoShow)
+                .Where(a => a.Status != AppointmentStatus.Cancelled
+                         && a.Status != AppointmentStatus.Rejected
+                         && a.Status != AppointmentStatus.NoShow)
                 .ToList();
 
-            var slots = new List<TimeSlotDto>();
-
             // Convert TimeOnly to TimeSpan for proper operations
-            var currentTime = operatingHours.OpenTime.Value.ToTimeSpan();
-            var endTime = operatingHours.CloseTime.Value.ToTimeSpan();
-            var slotDuration = TimeSpan.FromMinutes(30); // Default slot duration
+            var slots = new List<TimeSlotDto>();
+            var slotDuration = TimeSpan.FromMinutes(30);
+            var currentTime = effectiveOpen.ToTimeSpan();
+            var endTime = effectiveClose.ToTimeSpan();
 
-            // For today, skip past time slots
+            // For today, skip past slots
             if (date.Date == DateTime.UtcNow.Date)
             {
                 var now = DateTime.UtcNow.TimeOfDay;
@@ -253,21 +289,22 @@ namespace Smart_Medc.Application.Services.Organization
                     // Round up to next slot
                     var minutesSinceOpen = (now - currentTime).TotalMinutes;
                     var slotsToSkip = (int)Math.Ceiling(minutesSinceOpen / 30.0);
-                    currentTime = currentTime.Add(TimeSpan.FromMinutes(slotsToSkip * 30));
+                    currentTime = currentTime.Add(
+                        TimeSpan.FromMinutes(slotsToSkip * 30));
                 }
             }
 
             while (currentTime.Add(slotDuration) <= endTime)
             {
-                var slotEnd = currentTime.Add(slotDuration);
-
                 // Convert TimeSpan back to TimeOnly for comparison with appointments
+                var slotEnd = currentTime.Add(slotDuration);
                 var slotStartTimeOnly = TimeOnly.FromTimeSpan(currentTime);
                 var slotEndTimeOnly = TimeOnly.FromTimeSpan(slotEnd);
 
                 // Check for conflicts
                 bool isConflicted = confirmedAppointments.Any(a =>
-                    a.StartTime < slotEndTimeOnly && a.EndTime > slotStartTimeOnly);
+                    a.StartTime < slotEndTimeOnly
+                    && a.EndTime > slotStartTimeOnly);
 
                 slots.Add(new TimeSlotDto
                 {
@@ -281,8 +318,6 @@ namespace Smart_Medc.Application.Services.Organization
 
             return slots;
         }
-
-        // Add these two methods inside the existing OrganizationService class
 
         public async Task<List<GetOperatingHoursDto>> GetOperatingHoursAsync(
             Guid organizationId,
