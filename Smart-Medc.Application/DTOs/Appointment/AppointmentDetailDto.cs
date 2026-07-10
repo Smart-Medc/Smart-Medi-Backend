@@ -8,6 +8,7 @@ namespace Smart_Medc.Application.DTOs.Appointment
         public string Reason { get; set; } = string.Empty;
         public bool IsRecordsShared { get; set; }
         public string? AccessCode { get; set; }
+        public DateTime? AccessCodeExpiresAt { get; set; }
         public string CancellationPolicy { get; set; } = string.Empty;
         public string? PreparationInstructions { get; set; }
         public List<AppointmentHistoryItemDto> History { get; set; } = new();

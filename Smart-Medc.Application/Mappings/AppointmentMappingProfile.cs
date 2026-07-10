@@ -8,6 +8,12 @@ namespace Smart_Medc.Application.Mappings
     {
         public AppointmentMappingProfile()
         {
+            // Appointment Request Dto
+            CreateMap<Appointment, AppointmentRequestDto>()
+                .IncludeBase<Appointment, AppointmentDto>() // Include base mapping
+                .ForMember(dest => dest.RequestedAt, opt => opt.MapFrom(src => src.CreatedAt))
+                .ForMember(dest => dest.HasSharedRecords, opt => opt.MapFrom(src => src.IsRecordsShared));
+
             // Base Appointment DTO — unchanged
             CreateMap<Appointment, AppointmentDto>()
                 .ForMember(dest => dest.OrganizationName,
@@ -18,7 +24,7 @@ namespace Smart_Medc.Application.Mappings
                         src.Doctor != null ? src.Doctor.Name : "No Doctor Assigned"))
                 .ForMember(dest => dest.PatientName,
                     opt => opt.MapFrom(src =>
-                        src.Patient != null
+                        src.Patient != null && src.Patient.User != null
                             ? $"{src.Patient.User.FirstName} {src.Patient.User.LastName}"
                             : string.Empty))
                 .ForMember(dest => dest.Date,
@@ -46,6 +52,9 @@ namespace Smart_Medc.Application.Mappings
     .ForMember(dest => dest.AccessCode,
         opt => opt.MapFrom(src =>
             src.DataShareCode != null ? src.DataShareCode.Code : null))
+    .ForMember(dest => dest.AccessCodeExpiresAt,
+    opt => opt.MapFrom(src =>
+        src.DataShareCode != null ? src.DataShareCode.ExpiresAt : null))
     .ForMember(dest => dest.PreparationInstructions,
         opt => opt.MapFrom(src => src.PreparationInstructions))
     .ForMember(dest => dest.CancellationPolicy,
@@ -99,7 +108,6 @@ namespace Smart_Medc.Application.Mappings
         opt => opt.MapFrom(src =>
             src.Patient != null && src.Patient.HasNoKnownAllergies));
         }
-
         // ADDED: static helper used by the PatientAge mapping above.
         // Accounts for whether the birthday has occurred yet this year.
         private static int CalculateAge(DateTime dateOfBirth)
