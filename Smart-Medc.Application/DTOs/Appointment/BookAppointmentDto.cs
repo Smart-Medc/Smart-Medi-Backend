@@ -12,5 +12,9 @@ namespace Smart_Medc.Application.DTOs.Appointment
         public string Reason { get; set; } = string.Empty;
         public bool ShareRecords { get; set; }
         public List<Guid> RecordsToShare { get; set; } = new(); // Specific records to share
+
+        // ADDED: expiration type for the share code generated at booking time.
+        // Defaults to ThirtyDays to match the previous hardcoded value so
+        public string ExpirationType { get; set; } = "ThirtyDays";
     }
 }

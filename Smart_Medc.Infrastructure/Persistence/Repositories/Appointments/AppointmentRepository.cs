@@ -115,19 +115,30 @@ namespace Smart_Medc.Infrastructure.Persistence.Repositories.Appointments
         }
 
         public async Task<bool> HasConflictingAppointmentAsync(
-            Guid organizationId,
-            DateTime appointmentDate,
-            TimeSpan startTime,
-            TimeSpan endTime,
-            Guid? excludeAppointmentId = null,
-            CancellationToken cancellationToken = default)
+    Guid organizationId,
+    DateTime appointmentDate,
+    TimeSpan startTime,
+    TimeSpan endTime,
+    Guid? excludeAppointmentId = null,
+    CancellationToken cancellationToken = default)
         {
+            var dateOnly = appointmentDate.Date;
+
             var query = _dbSet
                 .Where(a => a.OrganizationId == organizationId &&
-                           a.AppointmentDate == appointmentDate &&
-                           a.Status != Domain.Enums.AppointmentStatus.Cancelled &&
-                           a.Status != Domain.Enums.AppointmentStatus.NoShow &&
-                           ((a.StartTime < TimeOnly.FromTimeSpan(endTime) && a.EndTime > TimeOnly.FromTimeSpan(startTime))));
+                            // CHANGED: use .Date to strip time component from stored
+                            // AppointmentDate values so legacy/seeded records with
+                            // non-midnight DateTime values are compared correctly.
+                            a.AppointmentDate.Date == dateOnly &&
+                            // CHANGED: added Rejected — rejected appointments must not
+                            // hold the slot open since the org has explicitly declined them.
+                            a.Status != Domain.Enums.AppointmentStatus.Cancelled &&
+                            a.Status != Domain.Enums.AppointmentStatus.Rejected &&
+                            a.Status != Domain.Enums.AppointmentStatus.NoShow &&
+                            // Overlap condition: new slot overlaps if it starts before
+                            // existing ends AND ends after existing starts.
+                            a.StartTime < TimeOnly.FromTimeSpan(endTime) &&
+                            a.EndTime > TimeOnly.FromTimeSpan(startTime));
 
             if (excludeAppointmentId.HasValue)
             {

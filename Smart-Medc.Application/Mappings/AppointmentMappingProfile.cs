@@ -52,6 +52,9 @@ namespace Smart_Medc.Application.Mappings
     .ForMember(dest => dest.AccessCode,
         opt => opt.MapFrom(src =>
             src.DataShareCode != null ? src.DataShareCode.Code : null))
+    .ForMember(dest => dest.AccessCodeExpiresAt,
+    opt => opt.MapFrom(src =>
+        src.DataShareCode != null ? src.DataShareCode.ExpiresAt : null))
     .ForMember(dest => dest.PreparationInstructions,
         opt => opt.MapFrom(src => src.PreparationInstructions))
     .ForMember(dest => dest.CancellationPolicy,

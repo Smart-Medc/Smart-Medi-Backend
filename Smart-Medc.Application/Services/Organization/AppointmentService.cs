@@ -87,14 +87,20 @@ namespace Smart_Medc.Application.Services.Organization
 
                 try
                 {
+                    // CHANGED: pass the patient-chosen ExpirationType instead of the hardcoded
+                    // "ThirtyDays". Also removed the RecordsToShare.Any() guard — when the
+                    // patient checks Share Records but selects no specific records, we treat
+                    // it as "no sharing" (IsRecordsShared stays true for UI but no code is
+                    // generated), which matches the existing frontend logic.
                     if (dto.ShareRecords && dto.RecordsToShare.Any())
                     {
-                        // Generate share code
                         var codeDto = await _dataSharingService.GenerateShareCodeAsync(
                             userId,
                             new DTOs.DataSharing.GenerateShareCodeDto
                             {
-                                ExpirationType = "ThirtyDays",
+                                // CHANGED: was hardcoded "ThirtyDays" — now uses the value
+                                // chosen by the patient in the booking form.
+                                ExpirationType = dto.ExpirationType,
                                 SpecificRecordIds = dto.RecordsToShare
                             },
                             cancellationToken);
